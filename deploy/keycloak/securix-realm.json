@@ -1,0 +1,130 @@
+{
+  "realm": "securix",
+  "displayName": "SecuriX Cyber Risk Platform",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "cfo",
+        "description": "CFO & Executive: Views financial ₹ exposure, top loss drivers, and risk posture"
+      },
+      {
+        "name": "analyst",
+        "description": "Security Analyst: Full access to technical findings, blast radius, scan execution, and verification"
+      },
+      {
+        "name": "auditor",
+        "description": "Compliance Auditor: Access to compliance matrix (RBI, SEBI, ISO, NIST, DPDP) and evidence packs"
+      },
+      {
+        "name": "admin",
+        "description": "Platform Administrator"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "securix-portal",
+      "name": "SecuriX Backstage & Portal Frontend",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    },
+    {
+      "clientId": "securix-api",
+      "name": "SecuriX Backend Microservices",
+      "enabled": true,
+      "bearerOnly": true
+    }
+  ],
+  "users": [
+    {
+      "username": "cfo_user",
+      "email": "cfo@securix.internal",
+      "firstName": "Chief",
+      "lastName": "Financial Officer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "cfo123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "cfo"
+      ]
+    },
+    {
+      "username": "analyst_user",
+      "email": "secops@securix.internal",
+      "firstName": "SecOps",
+      "lastName": "Analyst",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "analyst123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "analyst"
+      ]
+    },
+    {
+      "username": "auditor_user",
+      "email": "auditor@securix.internal",
+      "firstName": "Compliance",
+      "lastName": "Auditor",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "auditor123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "auditor"
+      ]
+    },
+    {
+      "username": "admin_user",
+      "email": "admin@securix.internal",
+      "firstName": "Platform",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin",
+        "analyst",
+        "cfo",
+        "auditor"
+      ]
+    }
+  ]
+}

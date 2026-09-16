@@ -1,0 +1,177 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import KPICards from './components/KPICards';
+import RiskQueue from './components/RiskQueue';
+import AssetDetail from './components/AssetDetail';
+import CompliancePlugin from './components/CompliancePlugin';
+import AttackGraph from './components/AttackGraph';
+import GrafanaEmbeds from './components/GrafanaEmbeds';
+import TopologyView from './components/TopologyView';
+import ScanModal from './components/ScanModal';
+import EvidenceModal from './components/EvidenceModal';
+import { fetchRiskQueue, toggleVerifyFinding } from './services/api';
+import { INITIAL_RISK_QUEUE } from './data/mockData';
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('risk-queue');
+  const [role, setRole] = useState('analyst'); // 'analyst' | 'cfo' | 'auditor'
+  const [riskQueue, setRiskQueue] = useState(INITIAL_RISK_QUEUE);
+  const [selectedFinding, setSelectedFinding] = useState(INITIAL_RISK_QUEUE[0]);
+  const [selectedToolFilter, setSelectedToolFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
+
+  // Fetch live risk queue on mount
+  useEffect(() => {
+    async function loadData() {
+      const data = await fetchRiskQueue();
+      if (Array.isArray(data) && data.length > 0) {
+        setRiskQueue(data);
+        setSelectedFinding(data[0]);
+      }
+    }
+    loadData();
+  }, []);
+
+  // Compute total financial exposure in INR
+  const totalExposureINR = useMemo(() => {
+    return riskQueue.reduce((acc, f) => acc + (f.expected_annual_loss_inr || 0), 0);
+  }, [riskQueue]);
+
+  // Verified findings count
+  const verifiedCount = useMemo(() => {
+    return riskQueue.filter((f) => f.verified).length;
+  }, [riskQueue]);
+
+  // Filtered queue based on tool and search term
+  const filteredQueue = useMemo(() => {
+    return riskQueue.filter((f) => {
+      const matchTool = selectedToolFilter === 'all' || f.tool === selectedToolFilter;
+      const matchSearch =
+        f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (f.asset_id && f.asset_id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (f.rule_id && f.rule_id.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchTool && matchSearch;
+    });
+  }, [riskQueue, selectedToolFilter, searchQuery]);
+
+  // Verification toggle with local update + backend async sync
+  const handleToggleVerification = async (findingId) => {
+    setRiskQueue((prev) =>
+      prev.map((f) => {
+        if (f.finding_id === findingId) {
+          return { ...f, verified: !f.verified };
+        }
+        return f;
+      })
+    );
+
+    if (selectedFinding && selectedFinding.finding_id === findingId) {
+      setSelectedFinding((prev) => ({ ...prev, verified: !prev.verified }));
+    }
+
+    await toggleVerifyFinding(findingId, role === 'analyst' ? 'SecOps Analyst' : 'Lead Auditor');
+  };
+
+  const handleScanComplete = (res) => {
+    // Optionally refresh queue if new findings were produced
+  };
+
+  return (
+    <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
+      {/* 1. Left Backstage Portal Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        riskCount={riskQueue.length}
+        role={role}
+      />
+
+      {/* 2. Main Application Workspace */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header */}
+        <Header
+          role={role}
+          setRole={setRole}
+          onOpenScan={() => setIsScanModalOpen(true)}
+          onOpenEvidence={() => setIsEvidenceModalOpen(true)}
+        />
+
+        {/* Scrollable Content Area */}
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Top KPI Metrics Banner */}
+          <KPICards
+            totalExposureINR={totalExposureINR}
+            riskCount={riskQueue.length}
+            verifiedCount={verifiedCount}
+            complianceScore={84.6}
+          />
+
+          {/* Plugin Screen 1: Risk Queue (₹ Financial Ranking) */}
+          {activeTab === 'risk-queue' && (
+            <div className="space-y-6">
+              <RiskQueue
+                riskQueue={filteredQueue}
+                selectedFinding={selectedFinding}
+                setSelectedFinding={setSelectedFinding}
+                selectedToolFilter={selectedToolFilter}
+                setSelectedToolFilter={setSelectedToolFilter}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                onToggleVerification={handleToggleVerification}
+              />
+
+              {/* Bottom preview of selected finding */}
+              {selectedFinding && (
+                <AssetDetail
+                  finding={selectedFinding}
+                  onToggleVerification={handleToggleVerification}
+                  onGenerateEvidence={() => setIsEvidenceModalOpen(true)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Plugin Screen 2: Dedicated Asset Trace & FAIR Detail */}
+          {activeTab === 'asset-detail' && (
+            <div className="space-y-6">
+              <AssetDetail
+                finding={selectedFinding}
+                onToggleVerification={handleToggleVerification}
+                onGenerateEvidence={() => setIsEvidenceModalOpen(true)}
+              />
+            </div>
+          )}
+
+          {/* Plugin Screen 3: Regulatory Compliance (OPA) */}
+          {activeTab === 'compliance' && <CompliancePlugin />}
+
+          {/* Plugin Screen 4: Apache AGE Attack Graph */}
+          {activeTab === 'attack-graph' && <AttackGraph />}
+
+          {/* Plugin Screen 5: Grafana Telemetry Embeds */}
+          {activeTab === 'dashboards' && <GrafanaEmbeds />}
+
+          {/* Plugin Screen 6: 6 Scanners & Topology Health */}
+          {activeTab === 'topology' && <TopologyView />}
+        </main>
+      </div>
+
+      {/* Interactive Scan Modal */}
+      <ScanModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+        onScanComplete={handleScanComplete}
+      />
+
+      {/* Evidence Pack Generation Modal */}
+      <EvidenceModal
+        isOpen={isEvidenceModalOpen}
+        onClose={() => setIsEvidenceModalOpen(false)}
+        selectedFinding={selectedFinding}
+      />
+    </div>
+  );
+}

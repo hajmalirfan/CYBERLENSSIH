@@ -1,0 +1,10 @@
+# Development & Testing dependencies for all backend services
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+pytest
+pytest-asyncio
+kafka-python
+python-jose[cryptography]
+psycopg2-binary

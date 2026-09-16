@@ -1,0 +1,134 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: securix-platform
+  title: SecuriX Cyber Risk Quantification Platform
+  description: Real-time risk quantification, compliance verification, and multi-scanner orchestration.
+spec:
+  owner: SecOps
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: graph-service
+  title: SecuriX Graph Service & Knowledge Graph
+  description: Kafka consumer bridging scan findings into PostgreSQL + Apache AGE.
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-3
+  system: securix-platform
+  providesApis:
+    - graph-query-api
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: temporal-orchestrator
+  title: Temporal Workflow Orchestrator
+  description: Coordinates execution across all 6 scanners based on target asset type.
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-4
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: agent-mesh
+  title: AI Agent Mesh & PyFair Engine
+  description: FAIR Monte Carlo loss simulation in INR and OPA regulatory compliance checks.
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-5
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: evidence-generator
+  title: Evidence Pack Generator
+  description: Produces SHA-256 attested, OpenTimestamps-anchored compliance evidence packages.
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-6
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: semgrep-service
+  title: Semgrep SAST Scanner
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-1
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: checkov-service
+  title: Checkov IaC Scanner
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-1
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cosign-service
+  title: Cosign Supply Chain Verifier
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-2
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: falco-service
+  title: Falco Runtime Sensor
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-3
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: suricata-service
+  title: Suricata Network IDS
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-3
+  system: securix-platform
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: zap-service
+  title: OWASP ZAP DAST Scanner
+spec:
+  type: service
+  lifecycle: production
+  owner: Member-4
+  system: securix-platform

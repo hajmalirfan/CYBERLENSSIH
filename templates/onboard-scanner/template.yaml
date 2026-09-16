@@ -1,0 +1,35 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: onboard-scanner-service
+  title: Onboard New Security Scanner Microservice
+  description: Scaffolds a new FastAPI scanner service integrated with the SecuriX Finding schema and Kafka topic findings.raw.
+spec:
+  owner: SecOps
+  type: service
+  parameters:
+    - title: Scanner Configuration
+      required:
+        - tool_name
+        - port
+      properties:
+        tool_name:
+          title: Tool Name (e.g. trivy, snyk)
+          type: string
+        port:
+          title: Port Number
+          type: integer
+          default: 8007
+        category:
+          title: Category
+          type: string
+          enum: [sast, iac, container, dast, network, runtime]
+  steps:
+    - id: fetch-template
+      name: Scaffold Service
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          tool_name: ${{ parameters.tool_name }}
+          port: ${{ parameters.port }}

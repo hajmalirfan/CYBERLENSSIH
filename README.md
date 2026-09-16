@@ -1,21 +1,81 @@
-# SecuriX Security Scan Layer — Prototype
+# SecuriX — Real-Time Cyber Risk Quantification Platform
 
-6 independent FastAPI services sharing one normalized `Finding` schema.
+Smart India Hackathon 2026 · Fully Open-Source Prototype
+
+---
+
+## Architecture
 
 ```
-                SecuriX Security Scan Layer
-                    Common Finding Schema (shared/schemas/finding.py)
-    Semgrep:8001 Checkov:8002 Cosign:8003 Falco:8004 Suricata:8005 ZAP:8006
-                    -> Normalized Findings -> Kafka findings.raw (optional)
+ ┌────────────────────────────────────────────────────────────────┐
+ │                       docker-compose.yml                      │
+ ├──────────────────────────┬─────────────────────────────────────┤
+ │       frontend/          │          backend/                   │
+ │  ┌──────────────────┐    │  ┌─────────────────────────────┐   │
+ │  │  Portal Server    │    │  │  shared/ (Finding schema,   │   │
+ │  │  :3000             │    │  │  graph client, Kafka, auth)│   │
+ │  │  static/index.html │    │  ├─────────────────────────────┤   │
+ │  └──────────────────┘    │  │  services/                   │   │
+ │                           │  │    semgrep-service   :8001   │   │
+ │                           │  │    checkov-service   :8002   │   │
+ │                           │  │    cosign-service    :8003   │   │
+ │                           │  │    falco-service     :8004   │   │
+ │                           │  │    suricata-service  :8005   │   │
+ │                           │  │    zap-service       :8006   │   │
+ │                           │  │    graph-service     :8010   │   │
+ │                           │  │    temporal-orch.    :8011   │   │
+ │                           │  │    evidence-gen.     :8012   │   │
+ │                           │  │    agent-mesh        :8013   │   │
+ │                           │  └─────────────────────────────┘   │
+ └──────────────────────────┴─────────────────────────────────────┘
+         Infra: PostgreSQL+AGE :5432 │ Kafka :9092 │ Temporal :7233
+                LiteLLM :4000 │ Keycloak :8080
 ```
 
-## Contract (every service)
+## Folder Structure
 
-- `GET /health` -> `{"status": "ok", "tool": "<name>"}`
-- `POST /scan` with `{"target": "..."}` -> `{"scan_id","tool","target","findings","timestamp"}`
-- `GET /results/{scan_id}` -> stored scan response
+```
+cyberlens-securix/
+├── frontend/               # Portal UI & BFF server
+│   ├── server.py           # FastAPI proxy + static server
+│   ├── static/index.html   # Single-page Backstage-style dashboard
+│   ├── shared/             # Copy of shared libs (graph fallback)
+│   ├── Dockerfile
+│   └── requirements.txt
+├── backend/                # All microservices
+│   ├── shared/             # Common modules
+│   │   ├── schemas/        # Finding schema (Pydantic)
+│   │   ├── graph/          # AGE graph client
+│   │   ├── kafka/          # Kafka producer helper
+│   │   ├── auth/           # Keycloak JWT middleware
+│   │   └── llm/            # LiteLLM client wrapper
+│   ├── services/           # 10 microservices
+│   │   ├── semgrep-service/
+│   │   ├── checkov-service/
+│   │   ├── cosign-service/
+│   │   ├── falco-service/
+│   │   ├── suricata-service/
+│   │   ├── zap-service/
+│   │   ├── graph-service/
+│   │   ├── temporal-orchestrator/
+│   │   ├── evidence-generator/
+│   │   └── agent-mesh/
+│   └── requirements-dev.txt
+├── config/                 # LiteLLM config
+├── deploy/                 # Keycloak realm export
+├── init-scripts/           # PostgreSQL+AGE init SQL
+├── targets/                # Sample scan targets
+├── docker-compose.yml      # Full stack orchestration
+└── README.md
+```
 
-Target semantics differ per tool (important for review):
+## Contract (every scanner service)
+
+- `GET /health` → `{"status": "ok", "tool": "<name>"}`
+- `POST /scan` with `{"target": "..."}` → `{"scan_id","tool","target","findings","timestamp"}`
+- `GET /results/{scan_id}` → stored scan response
+
+Target semantics differ per tool:
 
 | Service | Target | Notes |
 |---|---|---|
@@ -28,31 +88,75 @@ Target semantics differ per tool (important for review):
 
 ## Quickstart
 
+### Option 1 — Full Docker Stack
+
 ```powershell
-cd securix-prototype
+# From project root
+docker compose up --build
+```
+
+Portal at http://localhost:3000, individual services on their ports above.
+
+### Option 2 — Single Service
+
+```powershell
 docker compose up --build semgrep-service
 Invoke-RestMethod -Uri http://localhost:8001/health
 Invoke-RestMethod -Uri http://localhost:8001/scan -Method POST `
   -ContentType "application/json" -Body '{"target":"/workspace/demo"}'
 ```
 
-Each service starts independently: `docker compose up <service-name>`.
+### Option 3 — Local Dev (no Docker)
+
+```powershell
+# Create & activate venv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install dev deps
+pip install -r backend/requirements-dev.txt
+
+# Run a single service
+cd backend
+uvicorn services.semgrep-service.main:app --port 8001 --reload
+```
 
 ## Tests
 
-Unit tests mock the CLI (`subprocess.run`) so no tool binary is needed.
-Test files share the basename `test_main.py`, so a full-repo run needs
-`--import-mode=importlib` (per-service runs work with plain `pytest`):
-
 ```powershell
-cd securix-prototype
-python -m pytest --import-mode=importlib services/semgrep-service/tests services/checkov-service/tests services/cosign-service/tests services/falco-service/tests services/suricata-service/tests services/zap-service/tests -v
-# or per service:
-python -m pytest services/semgrep-service/tests -v
+# Activate venv first
+.\.venv\Scripts\Activate.ps1
+
+# Run all backend tests
+python -m pytest --import-mode=importlib `
+  backend/services/semgrep-service/tests `
+  backend/services/checkov-service/tests `
+  backend/services/cosign-service/tests `
+  backend/services/falco-service/tests `
+  backend/services/suricata-service/tests `
+  backend/services/zap-service/tests `
+  backend/services/graph-service/tests `
+  backend/services/agent-mesh/tests `
+  backend/services/evidence-generator/tests `
+  backend/services/temporal-orchestrator/tests `
+  -v
+
+# Or per service:
+python -m pytest backend/services/semgrep-service/tests -v
 ```
 
 ## Kafka (Phase 2)
 
 Services best-effort publish normalized findings to `findings.raw` only when
-`KAFKA_BOOTSTRAP_SERVERS` is set (e.g. `kafka:9092`). Uncomment the `kafka`
-service in `docker-compose.yml` to enable. No service fails if Kafka is absent.
+`KAFKA_BOOTSTRAP_SERVERS` is set (e.g. `kafka:9092`). No service fails if Kafka is absent.
+
+## Team Structure (SIH 2026)
+
+| # | Member | Owns (Tool) | Also Owns (Shared Infra) |
+|---|---|---|---|
+| 1 | Code Security | Semgrep, Checkov | Knowledge Graph (PostgreSQL + AGE) |
+| 2 | Supply Chain & CI/CD | Cosign/Sigstore | CI/CD pipeline (Trivy, Gitleaks, tfsec, gates) |
+| 3 | Runtime & Network | Falco, Suricata | Temporal Orchestrator |
+| 4 | Web App Security | OWASP ZAP | FAIR Engine (₹ quantification) |
+| 5 | AI/ML & Agent Mesh | LiteLLM + Agents | Agent Mesh, OPA guardrails |
+| 6 | Frontend & Compliance | Portal, Evidence | Backstage portal, evidence generation |

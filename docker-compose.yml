@@ -1,65 +1,238 @@
+version: '3.8'
+
 services:
+  # -------------------------------------------------------------
+  # 1. Knowledge Graph (PostgreSQL + Apache AGE)
+  # -------------------------------------------------------------
+  postgres-age:
+    image: apache/age:v1.5.0
+    container_name: securix-postgres-age
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-securix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securix_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-securix_db}
+    volumes:
+      - ./init-scripts/01-init-age.sql:/docker-entrypoint-initdb.d/01-init-age.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securix -d securix_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # 2. Kafka Event Bus (KRaft mode, findings.raw)
+  # -------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: securix-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  # -------------------------------------------------------------
+  # 3. Temporal Workflow Engine
+  # -------------------------------------------------------------
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: securix-temporal
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=securix
+      - POSTGRES_PWD=securix_pass
+      - POSTGRES_SEEDS=postgres-age
+    depends_on:
+      - postgres-age
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: securix-temporal-ui
+    ports:
+      - "8088:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - temporal
+
+  # -------------------------------------------------------------
+  # 4. LiteLLM AI Gateway
+  # -------------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: securix-litellm
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./config/litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-mock}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-sk-mock}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-sk-mock}
+
+  # -------------------------------------------------------------
+  # 5. Keycloak Identity & Access Provider (SSO & RBAC)
+  # -------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: securix-keycloak
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+    volumes:
+      - ./deploy/keycloak/securix-realm.json:/opt/keycloak/data/import/securix-realm.json:ro
+    command: ["start-dev", "--import-realm"]
+
+  # -------------------------------------------------------------
+  # 6. Core Platform Microservices
+  # -------------------------------------------------------------
+  graph-service:
+    build:
+      context: ./backend
+      dockerfile: services/graph-service/Dockerfile
+    container_name: securix-graph-service
+    restart: unless-stopped
+    ports:
+      - "8010:8010"
+    environment:
+      DATABASE_URL: postgresql://securix:securix_pass@postgres-age:5432/securix_db
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: findings.raw
+    depends_on:
+      - postgres-age
+      - kafka
+
+  temporal-orchestrator:
+    build:
+      context: ./backend
+      dockerfile: services/temporal-orchestrator/Dockerfile
+    container_name: securix-temporal-orchestrator
+    ports:
+      - "8011:8011"
+    environment:
+      SEMGREP_SERVICE_URL: http://semgrep-service:8001
+      CHECKOV_SERVICE_URL: http://checkov-service:8002
+      COSIGN_SERVICE_URL: http://cosign-service:8003
+      FALCO_SERVICE_URL: http://falco-service:8004
+      SURICATA_SERVICE_URL: http://suricata-service:8005
+      ZAP_SERVICE_URL: http://zap-service:8006
+      GRAPH_SERVICE_URL: http://graph-service:8010
+
+  agent-mesh:
+    build:
+      context: ./backend
+      dockerfile: services/agent-mesh/Dockerfile
+    container_name: securix-agent-mesh
+    ports:
+      - "8013:8013"
+    environment:
+      LITELLM_GATEWAY_URL: http://litellm:4000/v1
+
+  evidence-generator:
+    build:
+      context: ./backend
+      dockerfile: services/evidence-generator/Dockerfile
+    container_name: securix-evidence-generator
+    ports:
+      - "8012:8012"
+    environment:
+      GRAPH_SERVICE_URL: http://graph-service:8010
+
+  securix-portal:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: securix-portal
+    ports:
+      - "3000:3000"
+    environment:
+      GRAPH_SERVICE_URL: http://graph-service:8010
+      ORCHESTRATOR_URL: http://temporal-orchestrator:8011
+      EVIDENCE_URL: http://evidence-generator:8012
+    depends_on:
+      - graph-service
+
+  # -------------------------------------------------------------
+  # 7. The 6 Scanner Microservices
+  # -------------------------------------------------------------
   semgrep-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: services/semgrep-service/Dockerfile
     ports:
       - "8001:8001"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes:
       - ./targets:/workspace:ro
 
   checkov-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: services/checkov-service/Dockerfile
     ports:
       - "8002:8002"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes:
       - ./targets:/workspace:ro
 
   cosign-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: services/cosign-service/Dockerfile
     ports:
       - "8003:8003"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
   falco-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: services/falco-service/Dockerfile
     ports:
       - "8004:8004"
     privileged: true
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes:
       - ./targets:/workspace:ro
 
   suricata-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: services/suricata-service/Dockerfile
     ports:
       - "8005:8005"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes:
       - ./targets:/workspace:ro
 
   zap-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: services/zap-service/Dockerfile
     ports:
       - "8006:8006"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
-  # Optional Kafka for findings.raw (disabled by default).
-  # Uncomment to enable, then set KAFKA_BOOTSTRAP_SERVERS=kafka:9092 on the services.
-  # kafka:
-  #   image: apache/kafka:3.7.0
-  #   ports:
-  #     - "9092:9092"
-  #   environment:
-  #     KAFKA_NODE_ID: 1
-  #     KAFKA_PROCESS_ROLES: broker,controller
-  #     KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-  #     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-  #     KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-  #     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+volumes:
+  pgdata:

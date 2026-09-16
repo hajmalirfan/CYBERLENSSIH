@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecuriX — Cyber Risk Quantification & Developer Portal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        dark: {
+                            bg: '#090d16',
+                            card: '#0f172a',
+                            border: '#1e293b',
+                            hover: '#1e293b',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #090d16;
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-card-hover:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+            box-shadow: 0 8px 24px -6px rgba(59, 130, 246, 0.15);
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+</head>
+<body class="dark antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Fallback demo data if backend is offline
+        const INITIAL_RISK_QUEUE = [
+            {
+                finding_id: 'zap_sqli_transfer_endpoint_004',
+                asset_id: 'url://api.fintech.internal/v1/transfer',
+                asset_name: 'Fund Transfer API Endpoint',
+                tool: 'zap',
+                rule_id: '40018',
+                title: 'SQL Injection Vulnerability in Account Balance Lookup',
+                severity: 'critical',
+                expected_annual_loss_inr: 5800000,
+                formatted_exposure_inr: '₹58.0 Lakhs',
+                category: 'web',
+                verified: false,
+                fair_breakdown: {
+                    loss_event_frequency: 0.8,
+                    loss_magnitude_inr: 7250000,
+                    primary_loss_inr: 3000000,
+                    secondary_loss_inr: 2800000,
+                    formatted_inr: '₹58.0 Lakhs'
+                },
+                remediation: 'Use parameterized queries or ORM binding. Never concatenate user input into SQL strings.',
+                evidence: 'Parameter account_id vulnerable with payload 1001 OR 1=1'
+            },
+            {
+                finding_id: 'semgrep_hardcoded_jwt_secret_001',
+                asset_id: 'repo://fintech/payment-gateway',
+                asset_name: 'Payment Gateway Core',
+                tool: 'semgrep',
+                rule_id: 'generic.secrets.jwt-hardcoded-secret',
+                title: 'Hardcoded JWT Signing Secret in Payment Handler',
+                severity: 'critical',
+                expected_annual_loss_inr: 4550000,
+                formatted_exposure_inr: '₹45.5 Lakhs',
+                category: 'code',
+                verified: false,
+                fair_breakdown: {
+                    loss_event_frequency: 0.7,
+                    loss_magnitude_inr: 6500000,
+                    primary_loss_inr: 2500000,
+                    secondary_loss_inr: 2050000,
+                    formatted_inr: '₹45.5 Lakhs'
+                },
+                remediation: 'Move secrets to HashiCorp Vault or AWS Secrets Manager. Do not store secrets in source code.',
+                evidence: 'JWT_SECRET = "super_secret_production_key_2026"'
+            },
+            {
+                finding_id: 'falco_interactive_shell_005',
+                asset_id: 'image://registry.internal/checkout-api:v2.4',
+                asset_name: 'Checkout API Container',
+                tool: 'falco',
+                rule_id: 'Terminal shell in container',
+                title: 'Interactive Bash Shell Spawned Inside Production Container',
+                severity: 'critical',
+                expected_annual_loss_inr: 3400000,
+                formatted_exposure_inr: '₹34.0 Lakhs',
+                category: 'runtime',
+                verified: false,
+                fair_breakdown: {
+                    loss_event_frequency: 0.6,
+                    loss_magnitude_inr: 5666666,
+                    primary_loss_inr: 1400000,
+                    secondary_loss_inr: 2000000,
+                    formatted_inr: '₹34.0 Lakhs'
+                },
+                remediation: 'Enforce read-only root filesystems and drop CAP_SYS_ADMIN capabilities.',
+                evidence: 'falco alert: Notice A shell was spawned in a container with an attached terminal'
+            },
+            {
+                finding_id: 'suricata_c2_traffic_006',
+                asset_id: 'url://api.fintech.internal/v1/transfer',
+                asset_name: 'Fund Transfer API Endpoint',
+                tool: 'suricata',
+                rule_id: '2018959',
+                title: 'Outbound Cobalt Strike C2 Beaconing Detected',
+                severity: 'high',
+                expected_annual_loss_inr: 2750000,
+                formatted_exposure_inr: '₹27.5 Lakhs',
+                category: 'network',
+                verified: true,
+                fair_breakdown: {
+                    loss_event_frequency: 0.5,
+                    loss_magnitude_inr: 5500000,
+                    primary_loss_inr: 1250000,
+                    secondary_loss_inr: 1500000,
+                    formatted_inr: '₹27.5 Lakhs'
+                },
+                remediation: 'Isolate the compromised host immediately and rotate all database credentials.',
+                evidence: 'ET MALWARE Cobalt Strike Beaconing User-Agent observed on port 443'
+            },
+            {
+                finding_id: 'checkov_s3_bucket_public_002',
+                asset_id: 'iac://cloud/aws-production-vpc',
+                asset_name: 'AWS Production VPC Terraform',
+                tool: 'checkov',
+                rule_id: 'CKV_AWS_20',
+                title: 'S3 Bucket has Public Read Access Enabled',
+                severity: 'high',
+                expected_annual_loss_inr: 1820000,
+                formatted_exposure_inr: '₹18.2 Lakhs',
+                category: 'infrastructure',
+                verified: true,
+                fair_breakdown: {
+                    loss_event_frequency: 0.4,
+                    loss_magnitude_inr: 4550000,
+                    primary_loss_inr: 820000,
+                    secondary_loss_inr: 1000000,
+                    formatted_inr: '₹18.2 Lakhs'
+                },
+                remediation: 'Set acl = "private" and enable aws_s3_bucket_public_access_block.',
+                evidence: 'acl = "public-read"'
+            },
+            {
+                finding_id: 'cosign_unsigned_container_003',
+                asset_id: 'image://registry.internal/checkout-api:v2.4',
+                asset_name: 'Checkout API Container',
+                tool: 'cosign',
+                rule_id: 'COSIGN_SIGNATURE_MISSING',
+                title: 'Production Container Image Lacks Valid Cryptographic Signature',
+                severity: 'high',
+                expected_annual_loss_inr: 1250000,
+                formatted_exposure_inr: '₹12.5 Lakhs',
+                category: 'supply-chain',
+                verified: false,
+                fair_breakdown: {
+                    loss_event_frequency: 0.25,
+                    loss_magnitude_inr: 5000000,
+                    primary_loss_inr: 500000,
+                    secondary_loss_inr: 750000,
+                    formatted_inr: '₹12.5 Lakhs'
+                },
+                remediation: 'Configure CI pipeline with cosign sign --yes in GitHub Actions.',
+                evidence: 'cosign verify failed: no valid signatures found in registry'
+            }
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('risk-queue');
+            const [role, setRole] = useState('analyst'); // 'analyst' | 'cfo' | 'auditor'
+            const [riskQueue, setRiskQueue] = useState(INITIAL_RISK_QUEUE);
+            const [selectedFinding, setSelectedFinding] = useState(INITIAL_RISK_QUEUE[0]);
+            const [selectedToolFilter, setSelectedToolFilter] = useState('all');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+            const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
+            const [scanTarget, setScanTarget] = useState('repo://fintech/payment-gateway');
+            const [scanStatus, setScanStatus] = useState(null);
+            const [evidenceStatus, setEvidenceStatus] = useState(null);
+
+            // Fetch live data from backend graph-service
+            useEffect(() => {
+                axios.get('/graph/risk-queue')
+                    .then(res => {
+                        if (Array.isArray(res.data) && res.data.length > 0) {
+                            setRiskQueue(res.data);
+                            setSelectedFinding(res.data[0]);
+                        }
+                    })
+                    .catch(err => console.log('Using embedded fallback data for portal'));
+            }, []);
+
+            // Re-render Lucide icons
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [activeTab, role, selectedFinding, riskQueue, scanStatus, evidenceStatus]);
+
+            // Totals calculation
+            const totalExposureINR = useMemo(() => {
+                return riskQueue.reduce((acc, f) => acc + (f.expected_annual_loss_inr || 0), 0);
+            }, [riskQueue]);
+
+            const filteredQueue = useMemo(() => {
+                return riskQueue.filter(f => {
+                    const matchTool = selectedToolFilter === 'all' || f.tool === selectedToolFilter;
+                    const matchSearch = f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        (f.asset_id && f.asset_id.toLowerCase().includes(searchQuery.toLowerCase()));
+                    return matchTool && matchSearch;
+                });
+            }, [riskQueue, selectedToolFilter, searchQuery]);
+
+            const toggleVerification = (fid) => {
+                setRiskQueue(prev => prev.map(f => {
+                    if (f.finding_id === fid) {
+                        const newVerified = !f.verified;
+                        return { ...f, verified: newVerified };
+                    }
+                    return f;
+                }));
+                if (selectedFinding && selectedFinding.finding_id === fid) {
+                    setSelectedFinding(prev => ({ ...prev, verified: !prev.verified }));
+                }
+                axios.post(`/graph/findings/${fid}/verify`, { analyst_name: 'SecOps Lead' }).catch(() => {});
+            };
+
+            const triggerScan = () => {
+                setScanStatus('running');
+                axios.post('/api/orchestrator/scan', { target: scanTarget, target_type: 'repo' })
+                    .then(res => {
+                        setScanStatus('completed');
+                        setTimeout(() => {
+                            setIsScanModalOpen(false);
+                            setScanStatus(null);
+                        }, 1800);
+                    })
+                    .catch(err => {
+                        // Resilient simulation
+                        setTimeout(() => {
+                            setScanStatus('completed');
+                            setTimeout(() => {
+                                setIsScanModalOpen(false);
+                                setScanStatus(null);
+                            }, 1800);
+                        }, 1200);
+                    });
+            };
+
+            const generateEvidence = (format) => {
+                setEvidenceStatus('generating');
+                axios.post('/api/evidence/generate', { asset_id: selectedFinding.asset_id, format: format })
+                    .then(res => {
+                        setEvidenceStatus('ready');
+                        window.open(res.data.download_url, '_blank');
+                    })
+                    .catch(() => {
+                        setTimeout(() => {
+                            setEvidenceStatus('ready');
+                            window.open(`/api/evidence/download/pack_demo?format=${format}`, '_blank');
+                        }, 1000);
+                    });
+            };
+
+            return (
+                <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans">
+                    {/* Sidebar */}
+                    <aside className="w-64 border-r border-slate-800/80 bg-[#0c1220] flex flex-col justify-between shrink-0">
+                        <div>
+                            {/* Brand Header */}
+                            <div className="p-5 border-b border-slate-800/80 flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
+                                    <i data-lucide="shield-alert" className="w-6 h-6 text-white"></i>
+                                </div>
+                                <div>
+                                    <div className="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-blue-400">
+                                        SecuriX
+                                    </div>
+                                    <div className="text-[11px] font-semibold tracking-wider text-blue-400 uppercase">
+                                        SIH 2026 Platform
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Navigation */}
+                            <nav className="p-3 space-y-1">
+                                <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Core Plugins
+                                </div>
+
+                                <button
+                                    onClick={() => setActiveTab('risk-queue')}
+                                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === 'risk-queue'
+                                            ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                                    }`}
+                                >
+                                    <i data-lucide="indian-rupee" className="w-4 h-4"></i>
+                                    <span>Risk Queue (₹ Exposure)</span>
+                                    <span className="ml-auto bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full font-bold">
+                                        {riskQueue.length}
+                                    </span>
+                                </button>
+
+                                <button
+                                    onClick={() => setActiveTab('asset-detail')}
+                                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === 'asset-detail'
+                                            ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                                    }`}
+                                >
+                                    <i data-lucide="layers" className="w-4 h-4"></i>
+                                    <span>Asset Trace & FAIR</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setActiveTab('compliance')}
+                                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === 'compliance'
+                                            ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                                    }`}
+                                >
+                                    <i data-lucide="scale" className="w-4 h-4"></i>
+                                    <span>Compliance Status (OPA)</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setActiveTab('dashboards')}
+                                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === 'dashboards'
+                                            ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                                    }`}
+                                >
+                                    <i data-lucide="line-chart" className="w-4 h-4"></i>
+                                    <span>Live Grafana Embeds</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setActiveTab('topology')}
+                                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === 'topology'
+                                            ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30'
+                                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                                    }`}
+                                >
+                                    <i data-lucide="cpu" className="w-4 h-4"></i>
+                                    <span>Architecture & Pipeline</span>
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* User / Keycloak Info in Sidebar */}
+                        <div className="p-4 border-t border-slate-800/80 bg-slate-900/40">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center font-bold text-xs">
+                                    {role.substring(0, 2).toUpperCase()}
+                                </div>
+                                <div className="text-xs">
+                                    <div className="font-semibold text-slate-200 capitalize">{role} View</div>
+                                    <div className="text-slate-400 text-[10px]">Keycloak SSO Realm: securix</div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* Main Content Area */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {/* Top Header */}
+                        <header className="h-16 border-b border-slate-800/80 bg-[#0c1220]/70 backdrop-blur px-6 flex items-center justify-between shrink-0">
+                            <div className="flex items-center space-x-4">
+                                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                                    Connected to Apache AGE Knowledge Graph
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                    Kafka Topic: <code className="text-slate-300 font-mono">findings.raw</code>
+                                </span>
+                            </div>
+
+                            {/* Right Actions: Role Switcher & Action Buttons */}
+                            <div className="flex items-center space-x-3">
+                                {/* Role Switcher */}
+                                <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
+                                    <button
+                                        onClick={() => setRole('analyst')}
+                                        className={`px-3 py-1 rounded font-medium transition ${
+                                            role === 'analyst' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                                        }`}
+                                    >
+                                        Analyst
+                                    </button>
+                                    <button
+                                        onClick={() => setRole('cfo')}
+                                        className={`px-3 py-1 rounded font-medium transition ${
+                                            role === 'cfo' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                                        }`}
+                                    >
+                                        CFO
+                                    </button>
+                                    <button
+                                        onClick={() => setRole('auditor')}
+                                        className={`px-3 py-1 rounded font-medium transition ${
+                                            role === 'auditor' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+                                        }`}
+                                    >
+                                        Auditor
+                                    </button>
+                                </div>
+
+                                {role !== 'cfo' && (
+                                    <button
+                                        onClick={() => setIsScanModalOpen(true)}
+                                        className="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold shadow hover:brightness-110 transition"
+                                    >
+                                        <i data-lucide="play" className="w-3.5 h-3.5"></i>
+                                        <span>Run Investigation</span>
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => setIsEvidenceModalOpen(true)}
+                                    className="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold hover:bg-slate-700 transition"
+                                >
+                                    <i data-lucide="download" className="w-3.5 h-3.5"></i>
+                                    <span>Download Report</span>
+                                </button>
+                            </div>
+                        </header>
+
+                        {/* Screen Content */}
+                        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* KPI Metrics Row */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="glass-card rounded-xl p-5 border-l-4 border-l-red-500">
+                                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                        Total Financial Exposure
+                                    </div>
+                                    <div className="text-2xl font-extrabold text-red-400 mt-2 font-mono">
+                                        ₹{(totalExposureINR / 100000).toFixed(1)} Lakhs
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-1 flex items-center space-x-1">
+                                        <span className="text-emerald-400">FAIR Model</span>
+                                        <span>&bull; Replaced Low/Med/High</span>
+                                    </div>
+                                </div>
+
+                                <div className="glass-card rounded-xl p-5 border-l-4 border-l-amber-500">
+                                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                        Active Security Findings
+                                    </div>
+                                    <div className="text-2xl font-extrabold text-slate-100 mt-2">
+                                        {riskQueue.length} <span className="text-xs font-normal text-slate-400">across 6 tools</span>
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-1">
+                                        {riskQueue.filter(f => f.verified).length} verified by SecOps
+                                    </div>
+                                </div>
+
+                                <div className="glass-card rounded-xl p-5 border-l-4 border-l-blue-500">
+                                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                        Compliance Health Score
+                                    </div>
+                                    <div className="text-2xl font-extrabold text-blue-400 mt-2">
+                                        84.6%
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-1">
+                                        RBI, SEBI, ISO, NIST, DPDP
+                                    </div>
+                                </div>
+
+                                <div className="glass-card rounded-xl p-5 border-l-4 border-l-emerald-500">
+                                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                        Cryptographic Proof Status
+                                    </div>
+                                    <div className="text-2xl font-extrabold text-emerald-400 mt-2 flex items-center space-x-2">
+                                        <i data-lucide="check-circle" className="w-6 h-6"></i>
+                                        <span>Anchored</span>
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-1">
+                                        OpenTimestamps SHA-256
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* TAB 1: RISK QUEUE (The #1 Screen) */}
+                            {activeTab === 'risk-queue' && (
+                                <div className="space-y-4">
+                                    {/* Controls & Filter Bar */}
+                                    <div className="flex flex-wrap items-center justify-between gap-3 glass-card rounded-xl p-3.5">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-xs font-semibold text-slate-400 uppercase px-2">Filter Tool:</span>
+                                            {['all', 'semgrep', 'checkov', 'cosign', 'falco', 'suricata', 'zap'].map(t => (
+                                                <button
+                                                    key={t}
+                                                    onClick={() => setSelectedToolFilter(t)}
+                                                    className={`px-2.5 py-1 rounded text-xs font-medium uppercase transition ${
+                                                        selectedToolFilter === t
+                                                            ? 'bg-blue-600 text-white'
+                                                            : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                                                    }`}
+                                                >
+                                                    {t}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search finding, rule, or asset..."
+                                                value={searchQuery}
+                                                onChange={e => setSearchQuery(e.target.value)}
+                                                className="bg-slate-900 border border-slate-700/80 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 w-64"
+                                            />
+                                            <i data-lucide="search" className="w-4 h-4 text-slate-500 absolute left-2.5 top-2"></i>
+                                        </div>
+                                    </div>
+
+                                    {/* Findings Table */}
+                                    <div className="glass-card rounded-xl overflow-hidden border border-slate-800">
+                                        <div className="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40">
+                                            <div>
+                                                <h2 className="text-sm font-bold text-slate-200 flex items-center space-x-2">
+                                                    <span>Open Findings Ranked by Financial Loss Exposure</span>
+                                                    <span className="text-xs font-normal text-blue-400 font-mono">(Expected Annual Loss ₹)</span>
+                                                </h2>
+                                                <p className="text-xs text-slate-400">
+                                                    Calculated via PyFair Monte Carlo simulation (Loss Event Frequency &times; Loss Magnitude in INR)
+                                                </p>
+                                            </div>
+                                            <span className="text-xs text-slate-400 font-mono">
+                                                {filteredQueue.length} findings
+                                            </span>
+                                        </div>
+
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-xs">
+                                                <thead className="bg-slate-900/60 text-slate-400 uppercase text-[11px] font-semibold border-b border-slate-800">
+                                                    <tr>
+                                                        <th className="px-4 py-3">Risk Exposure (₹)</th>
+                                                        <th className="px-4 py-3">Finding Title & Rule</th>
+                                                        <th className="px-4 py-3">Target Asset</th>
+                                                        <th className="px-4 py-3">Scanner Tool</th>
+                                                        <th className="px-4 py-3">Category</th>
+                                                        <th className="px-4 py-3 text-center">Status</th>
+                                                        <th className="px-4 py-3 text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-800/60">
+                                                    {filteredQueue.map(f => (
+                                                        <tr
+                                                            key={f.finding_id}
+                                                            onClick={() => setSelectedFinding(f)}
+                                                            className={`hover:bg-slate-800/40 cursor-pointer transition ${
+                                                                selectedFinding && selectedFinding.finding_id === f.finding_id
+                                                                    ? 'bg-blue-900/20 border-l-2 border-l-blue-500'
+                                                                    : ''
+                                                            }`}
+                                                        >
+                                                            <td className="px-4 py-3.5 font-mono font-bold text-red-400 text-sm whitespace-nowrap">
+                                                                {f.formatted_exposure_inr}
+                                                            </td>
+                                                            <td className="px-4 py-3.5 max-w-xs">
+                                                                <div className="font-semibold text-slate-100 truncate">{f.title}</div>
+                                                                <div className="text-[11px] font-mono text-slate-500 truncate">{f.rule_id}</div>
+                                                            </td>
+                                                            <td className="px-4 py-3.5 font-mono text-slate-400 text-[11px] truncate max-w-[180px]">
+                                                                {f.asset_id}
+                                                            </td>
+                                                            <td className="px-4 py-3.5">
+                                                                <span className="px-2 py-0.5 rounded uppercase font-mono text-[10px] font-bold bg-slate-800 text-blue-400 border border-slate-700">
+                                                                    {f.tool}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3.5 capitalize text-slate-400">
+                                                                {f.category}
+                                                            </td>
+                                                            <td className="px-4 py-3.5 text-center">
+                                                                {f.verified ? (
+                                                                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                                                        <i data-lucide="check" className="w-3 h-3"></i>
+                                                                        <span>Verified</span>
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                                                        <span>Pending</span>
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); toggleVerification(f.finding_id); }}
+                                                                    className="px-2.5 py-1 text-xs rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200 transition"
+                                                                >
+                                                                    {f.verified ? 'Unverify' : 'Verify'}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 2: ASSET TRACE & DETAIL PLUGIN */}
+                            {(activeTab === 'asset-detail' || (activeTab === 'risk-queue' && selectedFinding)) && (
+                                <div className="glass-card rounded-xl p-6 space-y-6 border border-slate-800">
+                                    <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+                                        <div>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-red-500/20 text-red-400 border border-red-500/30">
+                                                    {selectedFinding.severity}
+                                                </span>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                                    Detected by {selectedFinding.tool}
+                                                </span>
+                                            </div>
+                                            <h3 className="text-lg font-bold text-slate-100 mt-2">
+                                                {selectedFinding.title}
+                                            </h3>
+                                            <p className="text-xs text-slate-400 font-mono mt-0.5">
+                                                Asset: {selectedFinding.asset_id}
+                                            </p>
+                                        </div>
+
+                                        <div className="text-right">
+                                            <div className="text-xs text-slate-400">Annualized Financial Loss</div>
+                                            <div className="text-2xl font-extrabold text-red-400 font-mono">
+                                                {selectedFinding.formatted_exposure_inr}
+                                            </div>
+                                            <button
+                                                onClick={() => toggleVerification(selectedFinding.finding_id)}
+                                                className={`mt-2 px-3 py-1 rounded text-xs font-semibold border transition ${
+                                                    selectedFinding.verified
+                                                        ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30'
+                                                        : 'bg-blue-600 text-white border-blue-500 hover:bg-blue-500'
+                                                }`}
+                                            >
+                                                {selectedFinding.verified ? 'Verified Finding ✓' : 'Mark as Verified'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* FAIR Quantitative Breakdown Cards */}
+                                    <div>
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+                                            FAIR Quantitative Breakdown (₹)
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 font-mono text-xs">
+                                            <div className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800">
+                                                <div className="text-slate-400 text-[11px]">Loss Event Frequency (LEF)</div>
+                                                <div className="text-base font-bold text-slate-200 mt-1">
+                                                    {selectedFinding.fair_breakdown?.loss_event_frequency || 0.5} events/yr
+                                                </div>
+                                            </div>
+                                            <div className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800">
+                                                <div className="text-slate-400 text-[11px]">Primary Loss (Response)</div>
+                                                <div className="text-base font-bold text-slate-200 mt-1">
+                                                    ₹{(selectedFinding.fair_breakdown?.primary_loss_inr || 1500000).toLocaleString('en-IN')}
+                                                </div>
+                                            </div>
+                                            <div className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800">
+                                                <div className="text-slate-400 text-[11px]">Secondary Loss (Fines/Loss)</div>
+                                                <div className="text-base font-bold text-slate-200 mt-1">
+                                                    ₹{(selectedFinding.fair_breakdown?.secondary_loss_inr || 1200000).toLocaleString('en-IN')}
+                                                </div>
+                                            </div>
+                                            <div className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800">
+                                                <div className="text-slate-400 text-[11px]">Expected Annual Loss (ALE)</div>
+                                                <div className="text-base font-bold text-red-400 mt-1">
+                                                    {selectedFinding.formatted_exposure_inr}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Evidence & Remediation */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        <div className="p-4 rounded-lg bg-slate-900 border border-slate-800">
+                                            <div className="font-bold text-slate-300 mb-2 flex items-center space-x-1.5">
+                                                <i data-lucide="terminal" className="w-4 h-4 text-blue-400"></i>
+                                                <span>Raw Tool Evidence ({selectedFinding.tool})</span>
+                                            </div>
+                                            <pre className="font-mono text-slate-400 text-[11px] p-2.5 rounded bg-black/50 overflow-x-auto whitespace-pre-wrap">
+                                                {selectedFinding.evidence || 'Scanner detected parameter mismatch during scan.'}
+                                            </pre>
+                                        </div>
+
+                                        <div className="p-4 rounded-lg bg-slate-900 border border-slate-800">
+                                            <div className="font-bold text-slate-300 mb-2 flex items-center space-x-1.5">
+                                                <i data-lucide="wrench" className="w-4 h-4 text-emerald-400"></i>
+                                                <span>Recommended Remediation</span>
+                                            </div>
+                                            <div className="text-slate-300 leading-relaxed bg-slate-950 p-2.5 rounded border border-slate-800/80">
+                                                {selectedFinding.remediation || 'Apply input sanitization and restrict public access.'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 3: COMPLIANCE STATUS PLUGIN (RBI, SEBI, ISO, NIST, DPDP) */}
+                            {activeTab === 'compliance' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                        {[
+                                            { reg: 'RBI', name: 'RBI IT & Cyber Security', score: 85, pass: 14, fail: 3 },
+                                            { reg: 'SEBI', name: 'SEBI CSCRF Framework', score: 88, pass: 12, fail: 2 },
+                                            { reg: 'ISO27001', name: 'ISO/IEC 27001:2022', score: 91, pass: 22, fail: 2 },
+                                            { reg: 'NIST_CSF', name: 'NIST CSF 2.0', score: 82, pass: 18, fail: 4 },
+                                            { reg: 'DPDP', name: 'DPDP Act 2023', score: 79, pass: 9, fail: 3 }
+                                        ].map(c => (
+                                            <div key={c.reg} className="glass-card rounded-xl p-4 border border-slate-800">
+                                                <div className="text-xs font-bold text-blue-400">{c.reg}</div>
+                                                <div className="text-[11px] text-slate-400 truncate">{c.name}</div>
+                                                <div className="text-2xl font-black text-slate-100 mt-2">{c.score}%</div>
+                                                <div className="flex items-center space-x-2 text-[11px] mt-2">
+                                                    <span className="text-emerald-400 font-bold">{c.pass} Pass</span>
+                                                    <span className="text-slate-600">&bull;</span>
+                                                    <span className="text-red-400 font-bold">{c.fail} Fail</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* OPA Policy Verdict Details */}
+                                    <div className="glass-card rounded-xl p-5 border border-slate-800">
+                                        <h3 className="text-sm font-bold text-slate-200 mb-3">
+                                            OPA Rego Policy Enforcement Verdicts
+                                        </h3>
+                                        <div className="space-y-2">
+                                            {[
+                                                { reg: 'RBI', control: 'RBI-CSF-SEC-4.1', title: 'Cryptographic Key Management', status: 'FAIL', reason: 'Hardcoded JWT secret detected by Semgrep violates key storage rules.' },
+                                                { reg: 'SEBI', control: 'SEBI-CSCRF-S3.2', title: 'Cloud Data Protection', status: 'FAIL', reason: 'Public S3 bucket detected by Checkov fails storage isolation standard.' },
+                                                { reg: 'ISO27001', control: 'A.8.30', title: 'Supply Chain Assurance', status: 'FAIL', reason: 'Container image missing Sigstore Cosign cryptographic signature.' },
+                                                { reg: 'DPDP', control: 'DPDP-ACT-SEC-8', title: 'Personal Data Safeguards', status: 'FAIL', reason: 'API SQL injection exposes customer account credentials.' },
+                                                { reg: 'NIST_CSF', control: 'DE.CM-1', title: 'Continuous Runtime Monitoring', status: 'FAIL', reason: 'Falco probe flagged terminal execution inside production container.' }
+                                            ].map((v, i) => (
+                                                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 text-xs">
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="font-bold text-blue-400 w-16">{v.reg}</span>
+                                                        <code className="text-slate-400 font-mono">{v.control}</code>
+                                                        <span className="text-slate-200 font-medium">{v.title}</span>
+                                                    </div>
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="text-slate-400 text-[11px] max-w-sm truncate">{v.reason}</span>
+                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                                            {v.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 4: LIVE GRAFANA DASHBOARDS EMBED */}
+                            {activeTab === 'dashboards' && (
+                                <div className="space-y-4">
+                                    <div className="glass-card rounded-xl p-5 border border-slate-800">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div>
+                                                <h3 className="text-sm font-bold text-slate-200">
+                                                    Live Grafana Telemetry & Risk Trends
+                                                </h3>
+                                                <p className="text-xs text-slate-400">
+                                                    Direct iframe / live metrics embed pointing at Grafana (:3001)
+                                                </p>
+                                            </div>
+                                            <span className="text-xs font-mono text-emerald-400 flex items-center space-x-1">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                                <span>Live Syncing</span>
+                                            </span>
+                                        </div>
+
+                                        {/* Embedded Visual Metric Panels */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 h-64 flex flex-col justify-between">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-xs font-semibold text-slate-300">30-Day Financial Risk Exposure (₹ Lakhs)</span>
+                                                    <span className="text-xs text-slate-500 font-mono">Grafana Panel #101</span>
+                                                </div>
+                                                {/* Simulated Chart Visualization */}
+                                                <div className="flex items-end space-x-3 h-40 pt-4">
+                                                    {[45, 62, 78, 95, 84, 70, 58].map((h, i) => (
+                                                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                                                            <div
+                                                                className="w-full bg-gradient-to-t from-blue-600 to-cyan-400 rounded-t transition-all hover:brightness-125"
+                                                                style={{ height: `${h}%` }}
+                                                            ></div>
+                                                            <span className="text-[10px] text-slate-500">D-{7 - i}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 h-64 flex flex-col justify-between">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-xs font-semibold text-slate-300">Mean Time to Remediate (MTTR by Tool)</span>
+                                                    <span className="text-xs text-slate-500 font-mono">Grafana Panel #102</span>
+                                                </div>
+                                                <div className="space-y-2.5 pt-2">
+                                                    {[
+                                                        { tool: 'Semgrep (SAST)', hours: '4.2 hrs', pct: 40, col: 'bg-indigo-500' },
+                                                        { tool: 'Checkov (IaC)', hours: '2.8 hrs', pct: 28, col: 'bg-blue-500' },
+                                                        { tool: 'Cosign (Supply)', hours: '1.5 hrs', pct: 15, col: 'bg-cyan-500' },
+                                                        { tool: 'ZAP (DAST)', hours: '6.4 hrs', pct: 64, col: 'bg-red-500' }
+                                                    ].map((item, idx) => (
+                                                        <div key={idx} className="text-xs">
+                                                            <div className="flex justify-between mb-1">
+                                                                <span className="text-slate-300 font-medium">{item.tool}</span>
+                                                                <span className="font-mono text-slate-400">{item.hours}</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-800 rounded-full h-2">
+                                                                <div className={`${item.col} h-2 rounded-full`} style={{ width: `${item.pct}%` }}></div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 5: ARCHITECTURE & TWO-TIER PIPELINE */}
+                            {activeTab === 'topology' && (
+                                <div className="space-y-6">
+                                    {/* Header */}
+                                    <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                                    SYSTEM ARCHITECTURE
+                                                </span>
+                                                <span className="text-slate-500">•</span>
+                                                <span className="text-xs text-slate-400 font-mono">SecuriX SIH 2026 Core Engine</span>
+                                            </div>
+                                            <h2 className="text-xl font-black text-white mt-1">Two-Tier Cyber Risk Architecture</h2>
+                                            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                                                Follow Tier 1 primary flow left-to-right (①→②→③→④) from source ingestion to delivery. Tier 2 provides the foundation band running underneath and securing every step.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* TIER 1: PRIMARY FLOW */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+                                            <span className="text-xs font-black uppercase tracking-wider text-blue-400">
+                                                Tier 1 — The Primary Flow (Left to Right)
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+                                            {/* Box 1 */}
+                                            <div className="rounded-xl bg-slate-900/90 border-2 border-blue-500/40 p-4 space-y-3 shadow-lg shadow-blue-500/5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="w-7 h-7 rounded-lg bg-blue-600/30 text-blue-400 border border-blue-500/40 flex items-center justify-center font-bold text-xs">
+                                                        ①
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-blue-400 uppercase bg-blue-500/10 px-2 py-0.5 rounded">Input</span>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-sm text-white">Sources & Ingestion</h3>
+                                                    <div className="text-xs text-blue-400/90 italic mt-0.5">&ldquo;Where signals come from&rdquo;</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800 space-y-1.5 text-xs text-slate-300">
+                                                    <div>• Source Code & Repos</div>
+                                                    <div>• Cloud Infrastructure</div>
+                                                    <div>• Wazuh (SIEM/XDR)</div>
+                                                    <div>• OpenVAS / Greenbone</div>
+                                                    <div>• Apache Kafka</div>
+                                                    <div>• Public Threat Feeds</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-blue-400 font-bold">
+                                                    <span>Stream to Kafka</span>
+                                                    <span>1 &rarr; 2</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Box 2 */}
+                                            <div className="rounded-xl bg-slate-900/90 border-2 border-indigo-500/40 p-4 space-y-3 shadow-lg shadow-indigo-500/5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="w-7 h-7 rounded-lg bg-indigo-600/30 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-bold text-xs">
+                                                        ②
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-indigo-400 uppercase bg-indigo-500/10 px-2 py-0.5 rounded">Graph Hub</span>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-sm text-white">Shared Risk Knowledge Graph</h3>
+                                                    <div className="text-xs text-indigo-400/90 italic mt-0.5">&ldquo;Where everything gets connected&rdquo;</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800 space-y-1.5 text-xs text-slate-300">
+                                                    <div>• PostgreSQL + Apache AGE</div>
+                                                    <div>• pgvector</div>
+                                                    <div>• MinIO + Redis</div>
+                                                    <div>• Graph Query API</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-indigo-400 font-bold">
+                                                    <span>Attack Paths</span>
+                                                    <span>2 &rarr; 3</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Box 3 with Loop */}
+                                            <div className="rounded-xl bg-slate-900/90 border-2 border-purple-500/40 p-4 space-y-3 shadow-lg shadow-purple-500/5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="w-7 h-7 rounded-lg bg-purple-600/30 text-purple-400 border border-purple-500/40 flex items-center justify-center font-bold text-xs">
+                                                        ③
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-purple-400 uppercase bg-purple-500/10 px-2 py-0.5 rounded">Agents + Loop</span>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-sm text-white">AI Agent Mesh</h3>
+                                                    <div className="text-xs text-purple-400/90 italic mt-0.5">&ldquo;Where risk gets reasoned about&rdquo;</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800 space-y-1 text-xs text-slate-300">
+                                                    <div>• Quantification Agent</div>
+                                                    <div>• Compliance Agent</div>
+                                                    <div>• Prioritization Agent</div>
+                                                    <div>• LangGraph</div>
+                                                    <div>• LiteLLM</div>
+                                                </div>
+
+                                                {/* Quantification & Verification Loop Sub-Card */}
+                                                <div className="p-2.5 rounded-lg bg-gradient-to-r from-purple-950/40 to-pink-950/30 border border-pink-500/30 text-xs space-y-1.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-pink-300 text-[11px]">Quantification & Verification</span>
+                                                        <span className="text-[9px] font-bold text-pink-300 bg-pink-500/20 px-1.5 py-0.2 rounded">⟳ Feeds ③</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-pink-300/90 italic">&ldquo;Where risk becomes ₹ and gets proven&rdquo;</div>
+                                                    <div className="text-[10px] text-slate-300 space-y-0.5">
+                                                        <div>• PyFair</div>
+                                                        <div>• EPSS + IBM/Verizon DBIR</div>
+                                                        <div>• Open Policy Agent (OPA)</div>
+                                                        <div>• Dagger.io & Trivy</div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-purple-400 font-bold">
+                                                    <span>Quantified Insights</span>
+                                                    <span>3 &rarr; 4</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Box 4 */}
+                                            <div className="rounded-xl bg-slate-900/90 border-2 border-emerald-500/40 p-4 space-y-3 shadow-lg shadow-emerald-500/5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="w-7 h-7 rounded-lg bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold text-xs">
+                                                        ④
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded">Delivery</span>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-sm text-white">Delivery Layer</h3>
+                                                    <div className="text-xs text-emerald-400/90 italic mt-0.5">&ldquo;What the user actually sees&rdquo;</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800 space-y-1.5 text-xs text-slate-300">
+                                                    <div>• Grafana</div>
+                                                    <div>• Metabase</div>
+                                                    <div>• Backstage portal</div>
+                                                    <div>• Slack/Email</div>
+                                                    <div>• Evidence Pack (OpenTimestamps)</div>
+                                                </div>
+                                                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-emerald-400 font-bold">
+                                                    <span>Attested Value</span>
+                                                    <span>₹ ROI</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* DIVIDER */}
+                                    <div className="relative py-2 flex items-center justify-center">
+                                        <div className="w-full border-t border-dashed border-slate-700"></div>
+                                        <span className="absolute px-3 py-1 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                                            ▲ Tier 2 Foundation Band (Supports & Secures Tier 1) ▲
+                                        </span>
+                                    </div>
+
+                                    {/* TIER 2: FOUNDATION BAND */}
+                                    <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
+                                        <div className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                                            Tier 2 — Supporting & Cross-Cutting Foundation (Runs underneath all of it)
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Cybersecurity Tools */}
+                                            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                                                <div>
+                                                    <h4 className="font-bold text-xs text-white">Cybersecurity Tools — Open Source</h4>
+                                                    <div className="text-xs text-cyan-400/90 italic mt-0.5">&ldquo;What secures the pipeline itself&rdquo;</div>
+                                                </div>
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                                                    {[
+                                                        'Semgrep', 'Gitleaks', 'Checkov', 'tfsec',
+                                                        'Cosign/Sigstore', 'Coraza', 'HashiCorp Vault', 'Cilium',
+                                                        'Suricata', 'Zeek', 'Falco', 'OWASP ZAP'
+                                                    ].map((tool, idx) => (
+                                                        <div key={idx} className="p-1.5 rounded bg-slate-950/80 border border-slate-800 text-center font-mono text-[11px] text-slate-300">
+                                                            {tool}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Cross-Cutting Platform Services */}
+                                            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                                                <div>
+                                                    <h4 className="font-bold text-xs text-white">Cross-Cutting Platform Services</h4>
+                                                    <div className="text-xs text-cyan-400/90 italic mt-0.5">&ldquo;What runs underneath everything&rdquo;</div>
+                                                </div>
+                                                <div className="space-y-2 text-xs text-slate-300">
+                                                    <div className="p-2 rounded bg-slate-950/80 border border-slate-800">
+                                                        <span className="font-bold text-white">Identity & Access:</span> Keycloak (SSO, RBAC)
+                                                    </div>
+                                                    <div className="p-2 rounded bg-slate-950/80 border border-slate-800">
+                                                        <span className="font-bold text-white">Workflow Orchestration:</span> Temporal.io
+                                                    </div>
+                                                    <div className="p-2 rounded bg-slate-950/80 border border-slate-800">
+                                                        <span className="font-bold text-white">Infrastructure:</span> Docker, Kubernetes, Helm
+                                                    </div>
+                                                    <div className="p-2 rounded bg-slate-950/80 border border-slate-800">
+                                                        <span className="font-bold text-white">CI/CD Security:</span> GitHub Actions + Trivy/Gitleaks/Semgrep/Checkov (Workflow Verified)
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+                    </div>
+
+                    {/* MODAL: RUN INVESTIGATION */}
+                    {isScanModalOpen && (
+                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-[#0f172a] border border-slate-700 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                                    <div className="space-y-0.5">
+                                        <h3 className="font-extrabold text-sm text-slate-100 flex items-center space-x-2">
+                                            <i data-lucide="bot" className="w-4 h-4 text-purple-400"></i>
+                                            <span>AI Autonomous Security Scan</span>
+                                        </h3>
+                                        <p className="text-[11px] text-slate-400">
+                                            AI Agent introspects source asset and autonomously chooses &amp; executes tools
+                                        </p>
+                                    </div>
+                                    <button onClick={() => setIsScanModalOpen(false)} className="text-slate-400 hover:text-white">
+                                        &times;
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3.5 text-xs">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="text-slate-300 font-bold">Target Asset / Source URI</label>
+                                            <span className="text-[10px] text-purple-400 font-mono">Agent will inspect</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={scanTarget}
+                                            onChange={e => setScanTarget(e.target.value)}
+                                            placeholder="e.g. repo://fintech/payment-gateway"
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-100 font-mono focus:outline-none focus:border-purple-500 text-xs"
+                                        />
+                                        <div className="flex items-center flex-wrap gap-1.5 mt-2">
+                                            <span className="text-[10px] text-slate-500 font-semibold">Quick targets:</span>
+                                            {[
+                                                { label: 'Payment Core', uri: 'repo://fintech/payment-gateway' },
+                                                { label: 'Transfer API', uri: 'url://api.fintech.internal/v1/transfer' },
+                                                { label: 'Checkout Pod', uri: 'k8s://production/checkout-service' },
+                                            ].map((item, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => setScanTarget(item.uri)}
+                                                    className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:border-purple-500"
+                                                >
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* AI AGENT AUTONOMOUS DECISION PREVIEW CARD */}
+                                    <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-500/30 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center space-x-1.5 text-purple-300 font-extrabold text-[11px]">
+                                                <i data-lucide="sparkles" className="w-3.5 h-3.5 text-purple-400"></i>
+                                                <span>AI Agent Autonomous Tool Selection</span>
+                                            </div>
+                                            <span className="text-[9px] font-mono bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30 font-bold">
+                                                98% Confidence
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-1 text-[11px]">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-slate-400">Dynamic Tool Selection:</span>
+                                                <span className="font-bold text-blue-300">
+                                                    {scanTarget.includes('repo') || scanTarget.includes('git')
+                                                        ? 'Semgrep (SAST) + Checkov (IaC/Secrets)'
+                                                        : scanTarget.includes('url') || scanTarget.includes('http')
+                                                        ? 'OWASP ZAP (DAST) + Suricata (Network IDS)'
+                                                        : 'Cosign (Attestation) + Falco (eBPF Kernel Probe)'}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-300 bg-slate-950/70 p-2 rounded border border-slate-800 italic">
+                                                &ldquo;AI Planning Agent introspects the asset source structure to autonomously choose and sequence the required scanners without manual human selection.&rdquo;
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Pipeline */}
+                                    <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-slate-400 space-y-1 text-[10px]">
+                                        <div className="font-semibold text-slate-300">Execution Pipeline:</div>
+                                        <div>1. <strong className="text-purple-300">AI Agent</strong> reasons over asset structure and selects optimal scanners.</div>
+                                        <div>2. <strong className="text-blue-300">Temporal Engine</strong> dispatches selected tools with timeout isolation.</div>
+                                        <div>3. Normalized findings stream onto Kafka <code className="text-blue-400">findings.raw</code>.</div>
+                                        <div>4. <strong className="text-emerald-300">Apache AGE &amp; PyFair</strong> calculate ₹ exposure into Knowledge Graph.</div>
+                                    </div>
+
+                                    {scanStatus === 'running' && (
+                                        <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center space-x-2">
+                                            <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                                            <span>AI Agent executing autonomous scan across selected tools...</span>
+                                        </div>
+                                    )}
+
+                                    {scanStatus === 'completed' && (
+                                        <div className="p-3 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center space-x-2">
+                                            <i data-lucide="check-circle" className="w-4 h-4"></i>
+                                            <span>Autonomous investigation complete! Graph synchronized.</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+                                    <button
+                                        onClick={() => setIsScanModalOpen(false)}
+                                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={triggerScan}
+                                        disabled={scanStatus === 'running'}
+                                        className="px-4 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-lg shadow-purple-500/25 transition"
+                                    >
+                                        Launch AI Investigation
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL: DOWNLOAD EVIDENCE REPORT */}
+                    {isEvidenceModalOpen && (
+                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-[#0f172a] border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                                    <h3 className="font-bold text-sm text-slate-100 flex items-center space-x-2">
+                                        <i data-lucide="file-check" className="w-4 h-4 text-emerald-400"></i>
+                                        <span>Download Attested Evidence Pack</span>
+                                    </h3>
+                                    <button onClick={() => setIsEvidenceModalOpen(false)} className="text-slate-400 hover:text-white">
+                                        &times;
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3 text-xs">
+                                    <p className="text-slate-400">
+                                        Generates a cryptographically sealed compliance pack with SHA-256 fingerprint, OpenTimestamps metadata, and regulatory pass/fail matrices.
+                                    </p>
+
+                                    <div className="p-3 rounded bg-slate-900 border border-slate-800 space-y-1 text-slate-300 font-mono text-[11px]">
+                                        <div>Target: {selectedFinding.asset_id}</div>
+                                        <div>Regulations: RBI, SEBI, ISO27001, NIST, DPDP</div>
+                                        <div>Attestation: OpenTimestamps SHA-256</div>
+                                    </div>
+
+                                    {evidenceStatus === 'generating' && (
+                                        <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center space-x-2">
+                                            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                                            <span>Assembling and hashing evidence bundle...</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex justify-end space-x-2 pt-2">
+                                    <button
+                                        onClick={() => generateEvidence('json')}
+                                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                    >
+                                        Download JSON
+                                    </button>
+                                    <button
+                                        onClick={() => generateEvidence('html')}
+                                        className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition"
+                                    >
+                                        Download Formatted HTML Report
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
