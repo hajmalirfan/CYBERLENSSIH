@@ -1,0 +1,65 @@
+services:
+  semgrep-service:
+    build:
+      context: .
+      dockerfile: services/semgrep-service/Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./targets:/workspace:ro
+
+  checkov-service:
+    build:
+      context: .
+      dockerfile: services/checkov-service/Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./targets:/workspace:ro
+
+  cosign-service:
+    build:
+      context: .
+      dockerfile: services/cosign-service/Dockerfile
+    ports:
+      - "8003:8003"
+
+  falco-service:
+    build:
+      context: .
+      dockerfile: services/falco-service/Dockerfile
+    ports:
+      - "8004:8004"
+    privileged: true
+    volumes:
+      - ./targets:/workspace:ro
+
+  suricata-service:
+    build:
+      context: .
+      dockerfile: services/suricata-service/Dockerfile
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./targets:/workspace:ro
+
+  zap-service:
+    build:
+      context: .
+      dockerfile: services/zap-service/Dockerfile
+    ports:
+      - "8006:8006"
+
+  # Optional Kafka for findings.raw (disabled by default).
+  # Uncomment to enable, then set KAFKA_BOOTSTRAP_SERVERS=kafka:9092 on the services.
+  # kafka:
+  #   image: apache/kafka:3.7.0
+  #   ports:
+  #     - "9092:9092"
+  #   environment:
+  #     KAFKA_NODE_ID: 1
+  #     KAFKA_PROCESS_ROLES: broker,controller
+  #     KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+  #     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+  #     KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+  #     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"

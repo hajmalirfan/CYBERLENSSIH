@@ -1,0 +1,1 @@
+{"output": "Sensitive file opened for reading by untrusted program", "priority": "Warning", "rule": "Read sensitive file untrusted", "time": "2026-09-16T00:00:00.000000000Z", "output_fields": {"fd.name": "/etc/shadow", "proc.name": "cat"}}
