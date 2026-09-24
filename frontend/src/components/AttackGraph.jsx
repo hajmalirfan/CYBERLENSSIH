@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, Info, ShieldAlert, Cpu } from 'lucide-react';
+import { Network, Info } from 'lucide-react';
 import { ATTACK_GRAPH_NODES, ATTACK_GRAPH_EDGES } from '../data/mockData';
 
 export default function AttackGraph() {
@@ -7,14 +7,14 @@ export default function AttackGraph() {
 
   return (
     <div className="space-y-4">
-      <div className="glass-card rounded-2xl p-6 border border-slate-800">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-4 mb-4">
+      <div className="glass-card rounded-2xl p-6 border border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-4 mb-4">
           <div>
-            <h3 className="text-sm font-bold text-slate-100 flex items-center space-x-2">
-              <Network className="w-4 h-4 text-blue-400" />
+            <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <Network className="w-4 h-4 text-blue-500" />
               <span>Apache AGE Attack Path & Topology Graph</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Knowledge Graph linking Monitored Assets &rarr; Vulnerability Nodes &rarr; Threat Vectors &rarr; Financial & Regulatory Impact
             </p>
           </div>
@@ -22,19 +22,19 @@ export default function AttackGraph() {
           <div className="flex items-center space-x-3 text-xs">
             <span className="flex items-center space-x-1">
               <span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span>
-              <span className="text-slate-400">Assets</span>
+              <span className="text-slate-500">Assets</span>
             </span>
             <span className="flex items-center space-x-1">
               <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
-              <span className="text-slate-400">Vulnerabilities</span>
+              <span className="text-slate-500">Vulnerabilities</span>
             </span>
             <span className="flex items-center space-x-1">
               <span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span>
-              <span className="text-slate-400">Threats</span>
+              <span className="text-slate-500">Threats</span>
             </span>
             <span className="flex items-center space-x-1">
               <span className="w-3 h-3 rounded-full bg-pink-500 inline-block"></span>
-              <span className="text-slate-400">Financial Impact</span>
+              <span className="text-slate-500">Financial Impact</span>
             </span>
           </div>
         </div>
@@ -42,7 +42,7 @@ export default function AttackGraph() {
         {/* Graph Canvas Visualizer */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* Interactive SVG Graph */}
-          <div className="lg:col-span-3 bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 relative overflow-hidden min-h-[460px] flex items-center justify-center">
+          <div className="lg:col-span-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 relative overflow-hidden min-h-[460px] flex items-center justify-center">
             <svg className="w-full h-full min-h-[440px]" viewBox="0 0 920 600">
               <defs>
                 <marker
@@ -54,7 +54,7 @@ export default function AttackGraph() {
                   markerHeight="6"
                   orient="auto-start-reverse"
                 >
-                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" />
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#94a3b8" />
                 </marker>
               </defs>
 
@@ -72,7 +72,7 @@ export default function AttackGraph() {
                       y1={source.y}
                       x2={target.x}
                       y2={target.y}
-                      stroke={isHighlighted ? '#60a5fa' : '#334155'}
+                      stroke={isHighlighted ? '#3b82f6' : '#cbd5e1'}
                       strokeWidth={isHighlighted ? 2.5 : 1.5}
                       strokeDasharray={edge.label === 'BUILT_FROM' ? '4,4' : 'none'}
                       markerEnd="url(#arrow)"
@@ -125,7 +125,7 @@ export default function AttackGraph() {
                     <text
                       x={node.x}
                       y={node.y + 30}
-                      fill="#e2e8f0"
+                      fill="#0f172a"
                       fontSize="11"
                       fontWeight="600"
                       textAnchor="middle"
@@ -139,10 +139,10 @@ export default function AttackGraph() {
           </div>
 
           {/* Node Inspector Card */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-              <Info className="w-4 h-4 text-blue-400" />
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+            <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
+              <Info className="w-4 h-4 text-blue-500" />
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Graph Node Inspector
               </h4>
             </div>
@@ -150,17 +150,17 @@ export default function AttackGraph() {
             {selectedNode ? (
               <div className="space-y-3 text-xs">
                 <div>
-                  <div className="text-[10px] text-slate-500 uppercase font-bold">Node Label</div>
-                  <div className="text-base font-bold text-slate-100">{selectedNode.label}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Node Label</div>
+                  <div className="text-base font-bold text-slate-900">{selectedNode.label}</div>
                 </div>
 
                 <div>
-                  <div className="text-[10px] text-slate-500 uppercase font-bold">AGE Vertex ID</div>
-                  <div className="font-mono text-slate-300 text-[11px]">{selectedNode.id}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">AGE Vertex ID</div>
+                  <div className="font-mono text-slate-600 text-[11px]">{selectedNode.id}</div>
                 </div>
 
                 <div>
-                  <div className="text-[10px] text-slate-500 uppercase font-bold">Node Class</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Node Class</div>
                   <span
                     className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold uppercase mt-1"
                     style={{ backgroundColor: `${selectedNode.color}25`, color: selectedNode.color }}
@@ -169,19 +169,19 @@ export default function AttackGraph() {
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <div className="text-[10px] text-slate-500 uppercase font-bold">Connected Edges</div>
+                <div className="pt-2 border-t border-slate-200 space-y-2">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Connected Edges</div>
                   {ATTACK_GRAPH_EDGES.filter(
                     (e) => e.from === selectedNode.id || e.to === selectedNode.id
                   ).map((e, idx) => (
-                    <div key={idx} className="p-2 rounded bg-slate-950 text-[11px] font-mono text-slate-400">
-                      {e.from} &rarr; <span className="text-blue-400">{e.label}</span> &rarr; {e.to}
+                    <div key={idx} className="p-2 rounded bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-500">
+                      {e.from} &rarr; <span className="text-blue-600">{e.label}</span> &rarr; {e.to}
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500">Click on any node in the graph to inspect its properties and relationships.</p>
+              <p className="text-xs text-slate-400">Click on any node in the graph to inspect its properties and relationships.</p>
             )}
           </div>
         </div>

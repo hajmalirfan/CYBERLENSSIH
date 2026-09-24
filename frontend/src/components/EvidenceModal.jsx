@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, FileCheck, Loader2, Download, ShieldCheck } from 'lucide-react';
+import { X, FileCheck, Loader2, ShieldCheck } from 'lucide-react';
 import { generateEvidencePack } from '../services/api';
 
 export default function EvidenceModal({ isOpen, onClose, selectedFinding }) {
@@ -26,40 +26,40 @@ export default function EvidenceModal({ isOpen, onClose, selectedFinding }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-[#0f172a] border border-slate-700/80 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="font-bold text-sm text-slate-100 flex items-center space-x-2">
-            <FileCheck className="w-4 h-4 text-emerald-400" />
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+            <FileCheck className="w-4 h-4 text-emerald-500" />
             <span>Generate Cryptographic Evidence Pack</span>
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-900 transition">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
         <div className="space-y-4 text-xs">
-          <p className="text-slate-400 leading-relaxed">
+          <p className="text-slate-500 leading-relaxed">
             Assembles a tamper-evident audit report containing raw scanner findings, FAIR risk calculations in ₹, regulatory pass/fail matrices, and OpenTimestamps blockchain proof.
           </p>
 
-          <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5 text-slate-300 font-mono text-[11px]">
-            <div><span className="text-slate-500">Asset:</span> {assetId}</div>
-            <div><span className="text-slate-500">Frameworks:</span> RBI, SEBI, DPDP, CERT-In, ISO27001</div>
-            <div><span className="text-slate-500">Attestation:</span> OpenTimestamps SHA-256 Hash</div>
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-slate-600 font-mono text-[11px]">
+            <div><span className="text-slate-400">Asset:</span> {assetId}</div>
+            <div><span className="text-slate-400">Frameworks:</span> RBI, SEBI, DPDP, CERT-In, ISO27001</div>
+            <div><span className="text-slate-400">Attestation:</span> OpenTimestamps SHA-256 Hash</div>
           </div>
 
           {status === 'generating' && (
-            <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center space-x-2">
+            <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center space-x-2">
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />
               <span>Hashing findings and generating compliance pack...</span>
             </div>
           )}
 
           {status === 'ready' && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center space-x-2">
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center space-x-2">
               <ShieldCheck className="w-4 h-4 shrink-0" />
               <span>Evidence pack generated and opened in new window!</span>
             </div>
@@ -67,10 +67,10 @@ export default function EvidenceModal({ isOpen, onClose, selectedFinding }) {
         </div>
 
         {/* Footer actions */}
-        <div className="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+        <div className="flex justify-end space-x-2 pt-2 border-t border-slate-200">
           <button
             onClick={() => handleGenerate('json')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
           >
             Download JSON
           </button>

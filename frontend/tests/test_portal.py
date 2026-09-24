@@ -29,7 +29,7 @@ def test_health():
 def test_serve_index():
     response = client.get("/")
     assert response.status_code == 200
-    assert "SecuriX" in response.text
+    assert "CYBERLENS" in response.text
 
 
 def test_proxy_risk_queue():

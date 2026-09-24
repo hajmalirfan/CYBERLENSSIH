@@ -10,20 +10,20 @@ export default function KPICards({ totalExposureINR, riskCount, verifiedCount, c
       {/* 1. Total Financial Exposure */}
       <div className="glass-card glass-card-hover rounded-2xl p-5 border-l-4 border-l-red-500 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Total Risk Exposure</span>
-            <IndianRupee className="w-4 h-4 text-red-400" />
+            <IndianRupee className="w-4 h-4 text-red-500" />
           </div>
-          <div className="text-2xl font-black text-red-400 mt-2 font-mono tracking-tight">
+          <div className="text-2xl font-black text-red-600 mt-2 font-mono tracking-tight">
             ₹{exposureInLakhs} Lakhs
           </div>
         </div>
-        <div className="text-xs text-slate-400 mt-2 flex items-center space-x-1.5">
-          <span className="text-emerald-400 font-semibold flex items-center">
+        <div className="text-xs text-slate-500 mt-2 flex items-center space-x-1.5">
+          <span className="text-emerald-600 font-semibold flex items-center">
             <TrendingUp className="w-3 h-3 mr-1 inline" />
             PyFair Quantified
           </span>
-          <span className="text-slate-600">&bull;</span>
+          <span className="text-slate-300">&bull;</span>
           <span>(₹{exposureInCrores} Cr)</span>
         </div>
       </div>
@@ -31,31 +31,31 @@ export default function KPICards({ totalExposureINR, riskCount, verifiedCount, c
       {/* 2. Active Security Findings */}
       <div className="glass-card glass-card-hover rounded-2xl p-5 border-l-4 border-l-amber-500 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Active Findings</span>
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-black text-slate-100 mt-2">
-            {riskCount} <span className="text-xs font-medium text-slate-400">across 6 tools</span>
+          <div className="text-2xl font-black text-slate-900 mt-2">
+            {riskCount} <span className="text-xs font-medium text-slate-500">across 6 tools</span>
           </div>
         </div>
-        <div className="text-xs text-slate-400 mt-2">
-          <span className="text-emerald-400 font-semibold">{verifiedCount} verified</span> by SecOps team
+        <div className="text-xs text-slate-500 mt-2">
+          <span className="text-emerald-600 font-semibold">{verifiedCount} verified</span> by SecOps team
         </div>
       </div>
 
       {/* 3. Compliance Health Score */}
       <div className="glass-card glass-card-hover rounded-2xl p-5 border-l-4 border-l-blue-500 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Compliance Health</span>
-            <ShieldCheck className="w-4 h-4 text-blue-400" />
+            <ShieldCheck className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="text-2xl font-black text-blue-400 mt-2">
+          <div className="text-2xl font-black text-blue-600 mt-2">
             {complianceScore}%
           </div>
         </div>
-        <div className="text-xs text-slate-400 mt-2 truncate">
+        <div className="text-xs text-slate-500 mt-2 truncate">
           RBI &bull; SEBI &bull; DPDP &bull; CERT-In &bull; ISO
         </div>
       </div>
@@ -63,15 +63,15 @@ export default function KPICards({ totalExposureINR, riskCount, verifiedCount, c
       {/* 4. Cryptographic Proof Status */}
       <div className="glass-card glass-card-hover rounded-2xl p-5 border-l-4 border-l-emerald-500 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
             <span>Evidence Attestation</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-black text-emerald-400 mt-2 flex items-center space-x-2">
+          <div className="text-2xl font-black text-emerald-600 mt-2 flex items-center space-x-2">
             <span>Anchored</span>
           </div>
         </div>
-        <div className="text-xs text-slate-400 mt-2 font-mono truncate">
+        <div className="text-xs text-slate-500 mt-2 font-mono truncate">
           OpenTimestamps &bull; SHA-256
         </div>
       </div>

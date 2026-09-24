@@ -10,12 +10,15 @@ import GrafanaEmbeds from './components/GrafanaEmbeds';
 import TopologyView from './components/TopologyView';
 import ScanModal from './components/ScanModal';
 import EvidenceModal from './components/EvidenceModal';
-import { fetchRiskQueue, toggleVerifyFinding } from './services/api';
+import AuthPage from './components/AuthPage';
+import { fetchRiskQueue, toggleVerifyFinding, fetchCurrentUser, getStoredUser, clearSession } from './services/api';
 import { INITIAL_RISK_QUEUE } from './data/mockData';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('risk-queue');
-  const [role, setRole] = useState('analyst'); // 'analyst' | 'cfo' | 'auditor'
+  const [user, setUser] = useState(() => getStoredUser());
+  const [authChecked, setAuthChecked] = useState(false);
+  // Role always comes from the logged-in DB user — no static default persona.
   const [riskQueue, setRiskQueue] = useState(INITIAL_RISK_QUEUE);
   const [selectedFinding, setSelectedFinding] = useState(INITIAL_RISK_QUEUE[0]);
   const [selectedToolFilter, setSelectedToolFilter] = useState('all');
@@ -23,8 +26,22 @@ export default function App() {
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
 
-  // Fetch live risk queue on mount
+  const role = user?.role || 'analyst';
+
+  // Validate stored JWT against Postgres on mount
   useEffect(() => {
+    async function checkAuth() {
+      const me = await fetchCurrentUser();
+      if (me) setUser(me);
+      else setUser(null);
+      setAuthChecked(true);
+    }
+    checkAuth();
+  }, []);
+
+  // Fetch live risk queue only after login
+  useEffect(() => {
+    if (!user) return;
     async function loadData() {
       const data = await fetchRiskQueue();
       if (Array.isArray(data) && data.length > 0) {
@@ -33,7 +50,16 @@ export default function App() {
       }
     }
     loadData();
-  }, []);
+  }, [user]);
+
+  const handleAuthSuccess = (loggedUser) => {
+    setUser(loggedUser);
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setUser(null);
+  };
 
   // Compute total financial exposure in INR
   const totalExposureINR = useMemo(() => {
@@ -72,21 +98,35 @@ export default function App() {
       setSelectedFinding((prev) => ({ ...prev, verified: !prev.verified }));
     }
 
-    await toggleVerifyFinding(findingId, role === 'analyst' ? 'SecOps Analyst' : 'Lead Auditor');
+    await toggleVerifyFinding(findingId, user?.name || 'SecOps Analyst');
   };
 
   const handleScanComplete = (res) => {
     // Optionally refresh queue if new findings were produced
   };
 
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white text-slate-500 text-sm">
+        Checking session...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
+  }
+
   return (
-    <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-white text-slate-900 font-sans overflow-hidden">
       {/* 1. Left Backstage Portal Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         riskCount={riskQueue.length}
         role={role}
+        user={user}
+        onLogout={handleLogout}
       />
 
       {/* 2. Main Application Workspace */}
@@ -94,13 +134,14 @@ export default function App() {
         {/* Top Header */}
         <Header
           role={role}
-          setRole={setRole}
+          user={user}
+          onLogout={handleLogout}
           onOpenScan={() => setIsScanModalOpen(true)}
           onOpenEvidence={() => setIsEvidenceModalOpen(true)}
         />
 
         {/* Scrollable Content Area */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+        <main className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
           {/* Top KPI Metrics Banner */}
           <KPICards
             totalExposureINR={totalExposureINR}

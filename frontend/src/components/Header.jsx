@@ -1,50 +1,30 @@
 import React from 'react';
-import { Play, Download, Database, Radio, PlusCircle } from 'lucide-react';
+import { Download, Database, Radio, PlusCircle, LogOut } from 'lucide-react';
 
-export default function Header({ role, setRole, onOpenScan, onOpenEvidence }) {
+export default function Header({ role, user, onLogout, onOpenScan, onOpenEvidence }) {
   return (
-    <header className="h-16 border-b border-slate-800/80 bg-[#0c1220]/80 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
+    <header className="h-16 border-b border-slate-200 bg-white/90 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
       {/* Platform Connectivity Status Badges */}
       <div className="flex items-center space-x-3">
-        <span className="flex items-center space-x-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+        <span className="flex items-center space-x-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium">
           <Database className="w-3.5 h-3.5" />
           <span>Apache AGE Knowledge Graph</span>
         </span>
-        <span className="hidden sm:flex items-center space-x-1.5 text-xs px-2.5 py-1 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/80 font-mono">
-          <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+        <span className="hidden sm:flex items-center space-x-1.5 text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200 font-mono">
+          <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
           <span>Kafka: findings.raw</span>
         </span>
       </div>
 
-      {/* Role Switcher & Primary Action Buttons */}
+      {/* Logged-in user + Primary Action Buttons (no static role switcher) */}
       <div className="flex items-center space-x-3">
-        {/* Role Switcher */}
-        <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs font-semibold">
-          <button
-            onClick={() => setRole('analyst')}
-            className={`px-3 py-1 rounded-lg transition-all ${
-              role === 'analyst' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Analyst
-          </button>
-          <button
-            onClick={() => setRole('cfo')}
-            className={`px-3 py-1 rounded-lg transition-all ${
-              role === 'cfo' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            CFO (₹)
-          </button>
-          <button
-            onClick={() => setRole('auditor')}
-            className={`px-3 py-1 rounded-lg transition-all ${
-              role === 'auditor' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Auditor
-          </button>
-        </div>
+        {user && (
+          <div className="hidden md:flex items-center space-x-2 text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-medium">
+            <span className="font-semibold text-slate-800">{user.name}</span>
+            <span className="text-slate-400">·</span>
+            <span className="capitalize text-blue-600">{role}</span>
+          </div>
+        )}
 
         {/* Trigger Investigation */}
         {role !== 'cfo' && (
@@ -60,10 +40,20 @@ export default function Header({ role, setRole, onOpenScan, onOpenEvidence }) {
         {/* Download Evidence Report */}
         <button
           onClick={onOpenEvidence}
-          className="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          className="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
         >
           <Download className="w-3.5 h-3.5" />
           <span>Evidence Pack</span>
+        </button>
+
+        {/* Logout (DB session) */}
+        <button
+          onClick={onLogout}
+          title="Logout"
+          className="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-semibold transition-all"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Logout</span>
         </button>
       </div>
     </header>

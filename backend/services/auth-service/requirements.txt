@@ -1,8 +1,9 @@
 fastapi
 uvicorn[standard]
-httpx
 pydantic
 psycopg2-binary
 bcrypt
 PyJWT
+pytest
+httpx
 email-validator

@@ -154,6 +154,20 @@ services:
     environment:
       GRAPH_SERVICE_URL: http://graph-service:8010
 
+  auth-service:
+    build:
+      context: ./backend
+      dockerfile: services/auth-service/Dockerfile
+    container_name: securix-auth-service
+    restart: unless-stopped
+    ports:
+      - "8019:8019"
+    environment:
+      DATABASE_URL: postgresql://securix:securix_pass@postgres-age:5432/securix_db
+      JWT_SECRET: ${JWT_SECRET:-securix-dev-secret-change-me}
+    depends_on:
+      - postgres-age
+
   securix-portal:
     build:
       context: ./frontend
@@ -165,8 +179,11 @@ services:
       GRAPH_SERVICE_URL: http://graph-service:8010
       ORCHESTRATOR_URL: http://temporal-orchestrator:8011
       EVIDENCE_URL: http://evidence-generator:8012
+      AUTH_SERVICE_URL: http://auth-service:8019
+      JWT_SECRET: ${JWT_SECRET:-securix-dev-secret-change-me}
     depends_on:
       - graph-service
+      - auth-service
 
   # -------------------------------------------------------------
   # 7. The 6 Scanner Microservices

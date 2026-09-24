@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SecuriX Graph Service & Query API",
+    title="CYBERLENS Graph Service & Query API",
     description="Knowledge Graph connector between all 6 scanners and the Backstage portal.",
     version="1.0.0",
     lifespan=lifespan,

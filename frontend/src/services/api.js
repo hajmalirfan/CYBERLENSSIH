@@ -2,6 +2,100 @@ import { INITIAL_RISK_QUEUE, COMPLIANCE_REGULATIONS } from '../data/mockData';
 
 const BASE_URL = ''; // Relative path for Vite proxy or server hosting
 
+const TOKEN_KEY = 'securix_token';
+const USER_KEY = 'securix_user';
+
+export function getToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(user, token) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function clearSession() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function parseAuthResponse(res) {
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    throw new Error((data && data.detail) || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+export async function registerUser({ name, email, password, role = 'analyst' }) {
+  const res = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password, role }),
+  });
+  const data = await parseAuthResponse(res);
+  saveSession(data.user, data.token);
+  return data;
+}
+
+export async function loginUser({ email, password }) {
+  const res = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await parseAuthResponse(res);
+  saveSession(data.user, data.token);
+  return data;
+}
+
+export async function fetchCurrentUser() {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${BASE_URL}/api/auth/me`, { headers: { ...authHeaders() } });
+    if (!res.ok) {
+      clearSession();
+      return null;
+    }
+    const data = await res.json();
+    return data.user || null;
+  } catch {
+    return getStoredUser();
+  }
+}
+
 export async function fetchRiskQueue(limit = 50) {
   try {
     const res = await fetch(`${BASE_URL}/graph/risk-queue?limit=${limit}`);
@@ -45,7 +139,7 @@ export async function toggleVerifyFinding(findingId, analystName = 'SecOps Lead'
   try {
     const res = await fetch(`${BASE_URL}/graph/findings/${findingId}/verify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ analyst_name: analystName })
     });
     if (res.ok) {
