@@ -1,12 +1,22 @@
-"""SecuriX Unified Finding Schema.
+"""SecuriX Unified Finding & Platform Schemas (Frontend fallback mirror).
 
-Common data shape shared across all 6 scanner services, Kafka event bus,
-Apache AGE knowledge graph, AI agent mesh, and the Backstage/SecuriX portal.
-Supports both legacy fields (tool, file, line) and team Day 0 fields (source_tool, file_path, line_number).
+Common data shape shared across all scanner services, Kafka event bus,
+Apache AGE knowledge graph, AI agent mesh, and the portal.
+Section 3 of SecuriX Implementation Guide.
 """
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 from pydantic import BaseModel, Field, model_validator
+
+
+class Severity(str, Enum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
 
 
 class FAIRExposure(BaseModel):
@@ -32,113 +42,142 @@ class OPAVerdict(BaseModel):
 
 
 class Finding(BaseModel):
-    """Normalized SecuriX finding shared by all 6 scanner services and core platform."""
+    """Normalized SecuriX finding matching Section 3.1 of guide and platform needs."""
 
-    scan_id: str
+    finding_id: str = Field(default_factory=lambda: str(uuid4()))
+    source: str = "generic"
+    tier: int = 1
+    tenant_id: str = "default"
+    repo_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    commit_sha: Optional[str] = None
+    rule_id: str = "GENERIC"
+    severity: Severity = Severity.MEDIUM
+    file_path: Optional[str] = None
+    line_number: Optional[int] = None
+    description: str = ""
+    raw_output: Dict[str, Any] = Field(default_factory=dict)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    scan_id: Optional[str] = None
     source_tool: Optional[str] = None
     tool: Optional[str] = None
-    target: str
-
-    rule_id: Optional[str] = None
-    title: str
-    description: Optional[str] = None
-
-    severity: str = "info"  # critical, high, medium, low, info
-
-    file_path: Optional[str] = None
+    target: Optional[str] = None
+    title: Optional[str] = None
     file: Optional[str] = None
-    line_number: Optional[int] = None
     line: Optional[int] = None
     column: Optional[int] = None
-
     category: Optional[str] = "vulnerability"
     evidence: Optional[str] = None
     remediation: Optional[str] = None
-
-    # Asset context
-    asset_id: Optional[str] = None
-    asset_type: Optional[str] = None  # repo, container_image, iac_source, web_endpoint, host, network
-
-    # Vulnerability metadata
+    asset_type: Optional[str] = None
     cve: Optional[str] = None
     cwe: Optional[str] = None
     cvss_score: Optional[float] = None
     confidence: Optional[str] = "medium"
+    status: str = "open"
 
-    # Agent Mesh: Quantification & Compliance
     fair_exposure: Optional[FAIRExposure] = None
     compliance_tags: List[str] = Field(default_factory=list)
     opa_verdicts: List[OPAVerdict] = Field(default_factory=list)
 
-    # Verification status (analyst sign-off)
     verified: bool = False
     verified_by: Optional[str] = None
     verified_at: Optional[datetime] = None
-
-    # Raw tool outputs and metadata
-    raw_output: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-    # Timestamps
-    scanned_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    scanned_at: Optional[datetime] = None
     timestamp: Optional[datetime] = None
 
     @model_validator(mode="before")
     @classmethod
     def reconcile_field_aliases(cls, data: Any) -> Any:
-        """Harmonize tool/source_tool, file/file_path, line/line_number, timestamp/scanned_at."""
         if not isinstance(data, dict):
             return data
 
         d = dict(data)
-        # Harmonize tool / source_tool
-        t = d.get("tool") or d.get("source_tool") or "unknown"
-        d["tool"] = t
-        d["source_tool"] = t
 
-        # Harmonize file / file_path
-        f = d.get("file") or d.get("file_path")
+        fid = d.get("finding_id") or d.get("id") or d.get("scan_id")
+        if not fid:
+            fid = str(uuid4())
+        d["finding_id"] = str(fid)
+        if not d.get("scan_id"):
+            d["scan_id"] = str(fid)
+
+        src = d.get("source") or d.get("source_tool") or d.get("tool") or "unknown"
+        d["source"] = src
+        d["source_tool"] = src
+        d["tool"] = src
+
+        f = d.get("file_path") or d.get("file")
         d["file"] = f
         d["file_path"] = f
-
-        # Harmonize line / line_number
-        l = d.get("line") if d.get("line") is not None else d.get("line_number")
+        l = d.get("line_number") if d.get("line_number") is not None else d.get("line")
         d["line"] = l
         d["line_number"] = l
 
-        # Harmonize timestamp / scanned_at
-        ts = d.get("timestamp") or d.get("scanned_at")
-        if ts:
-            d["timestamp"] = ts
-            d["scanned_at"] = ts
-
-        # Fallback asset_id if not explicitly provided
+        tgt = d.get("target") or d.get("asset_id") or d.get("repo_id") or "default_target"
+        d["target"] = tgt
         if not d.get("asset_id"):
-            d["asset_id"] = d.get("target")
+            d["asset_id"] = tgt
+
+        desc = d.get("description") or d.get("title") or d.get("rule_id") or "Security finding"
+        d["description"] = desc
+        if not d.get("title"):
+            d["title"] = desc[:120]
+
+        sev_val = str(d.get("severity", "medium")).lower()
+        try:
+            d["severity"] = Severity(sev_val)
+        except Exception:
+            d["severity"] = Severity.MEDIUM
+
+        now = datetime.now(timezone.utc)
+        ts = d.get("detected_at") or d.get("scanned_at") or d.get("timestamp") or now
+        d["detected_at"] = ts
+        d["scanned_at"] = ts
+        d["timestamp"] = ts
 
         return d
 
     def to_kafka_dict(self) -> Dict[str, Any]:
-        """Convert finding to JSON-safe dictionary for Kafka publication."""
         return self.model_dump(mode="json")
 
-    def to_graph_node(self) -> Dict[str, Any]:
-        """Extract properties for Knowledge Graph Finding node."""
-        exposure_inr = self.fair_exposure.expected_annual_loss_inr if self.fair_exposure else 0.0
-        return {
-            "id": f"{self.tool}_{self.rule_id}_{self.scan_id[:8]}",
-            "scan_id": self.scan_id,
-            "tool": self.tool or self.source_tool,
-            "target": self.target,
-            "asset_id": self.asset_id or self.target,
-            "rule_id": self.rule_id or "GENERIC",
-            "title": self.title,
-            "severity": self.severity.lower(),
-            "description": self.description or "",
-            "file": self.file or self.file_path or "",
-            "line": self.line or self.line_number or 0,
-            "category": self.category or "code",
-            "expected_annual_loss_inr": exposure_inr,
-            "verified": self.verified,
-            "scanned_at": (self.scanned_at or datetime.now(timezone.utc)).isoformat(),
-        }
+
+class Alert(BaseModel):
+    finding_id: str
+    tenant_id: str = "default"
+    asset: str
+    title: str
+    severity: str
+    eal_inr: float
+    rank: int
+    verdicts: Dict[str, str] = Field(default_factory=dict)
+    exploitable: bool = False
+    evidence_url: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class RiskState(BaseModel):
+    finding_id: str
+    tenant_id: str = "default"
+    asset_id: Optional[str] = None
+    title: str = ""
+    eal_inr: float = 0.0
+    p90_loss_inr: float = 0.0
+    rank: int = 1
+    verdicts: Dict[str, str] = Field(default_factory=dict)
+    evidence_url: str = ""
+    status: str = "open"
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ScanJob(BaseModel):
+    job_id: str = Field(default_factory=lambda: str(uuid4()))
+    tenant_id: str = "default"
+    repo_id: str
+    mode: str = "incremental"
+    commit_sha: Optional[str] = None
+    status: str = "queued"
+    tools_run: List[str] = Field(default_factory=list)
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None

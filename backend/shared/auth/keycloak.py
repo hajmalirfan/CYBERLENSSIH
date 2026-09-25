@@ -82,3 +82,25 @@ def require_roles(allowed_roles: List[str]):
         return user
 
     return role_checker
+
+
+def current_user(credentials: Optional[HTTPAuthorizationCredentials] = Security(security)) -> Dict[str, Any]:
+    """Resolve current authenticated Keycloak user claims (Section 10.2)."""
+    if not credentials:
+        if KEYCLOAK_DEV_MODE:
+            return {
+                "sub": "dev_default_user",
+                "preferred_username": "analyst_user",
+                "tenant_id": "default",
+                "realm_access": {"roles": ["platform_admin", "analyst", "compliance_approver", "auditor", "executive"]},
+                "roles": ["analyst", "cfo", "auditor", "admin", "platform_admin"],
+                "mode": "dev_default"
+            }
+        raise HTTPException(status_code=401, detail="Missing Authorization Bearer header")
+    return extract_user_from_token(credentials.credentials)
+
+
+def require(*roles: str):
+    """Guide Section 10.2 dependency: require(*roles)."""
+    return require_roles(list(roles))
+

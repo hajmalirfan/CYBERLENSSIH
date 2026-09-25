@@ -68,15 +68,43 @@ def get_workflow_status(workflow_id: str):
     return result
 
 
+@app.post("/api/orchestrator/investigate/{finding_id}")
+async def investigate_finding(finding_id: str):
+    """Trigger InvestigateAssetWorkflow for a serious finding (Section 6.1)."""
+    from workflows import InvestigateAssetWorkflow
+    wf = InvestigateAssetWorkflow()
+    result = await wf.run(finding_id)
+    return result
+
+
+@app.post("/api/orchestrator/reverify/{finding_id}")
+async def reverify_finding(finding_id: str, new_sha: str = "HEAD"):
+    """Trigger ReverifyFindingWorkflow after a code fix (Section 6.4)."""
+    from workflows import ReverifyFindingWorkflow
+    wf = ReverifyFindingWorkflow()
+    result = await wf.run(finding_id, new_sha)
+    return result
+
+
+@app.post("/api/orchestrator/onboard/{repo_id}")
+async def onboard_repo(repo_id: str):
+    """Trigger OnboardingWorkflow for repository (Section 11.3)."""
+    from workflows import OnboardingWorkflow
+    wf = OnboardingWorkflow()
+    result = await wf.run(repo_id)
+    return result
+
+
 @app.get("/api/orchestrator/tools")
 def list_supported_tools():
     """List all supported scanner tools and target mappings."""
     return {
-        "supported_tools": ["semgrep", "checkov", "cosign", "falco", "suricata", "zap"],
+        "supported_tools": ["semgrep", "checkov", "cosign", "falco", "suricata", "zap", "gitleaks", "trivy"],
         "target_mappings": {
-            "repo": ["semgrep", "checkov"],
+            "repo": ["semgrep", "checkov", "gitleaks", "trivy"],
             "container": ["cosign", "falco"],
             "web": ["zap", "suricata"],
             "all": ["semgrep", "checkov", "cosign", "falco", "suricata", "zap"],
         }
     }
+

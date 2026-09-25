@@ -12,15 +12,14 @@ import ScanModal from './components/ScanModal';
 import EvidenceModal from './components/EvidenceModal';
 import AuthPage from './components/AuthPage';
 import { fetchRiskQueue, toggleVerifyFinding, fetchCurrentUser, getStoredUser, clearSession } from './services/api';
-import { INITIAL_RISK_QUEUE } from './data/mockData';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('risk-queue');
   const [user, setUser] = useState(() => getStoredUser());
   const [authChecked, setAuthChecked] = useState(false);
   // Role always comes from the logged-in DB user — no static default persona.
-  const [riskQueue, setRiskQueue] = useState(INITIAL_RISK_QUEUE);
-  const [selectedFinding, setSelectedFinding] = useState(INITIAL_RISK_QUEUE[0]);
+  const [riskQueue, setRiskQueue] = useState([]);
+  const [selectedFinding, setSelectedFinding] = useState(null);
   const [selectedToolFilter, setSelectedToolFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
@@ -190,7 +189,7 @@ export default function App() {
           {activeTab === 'compliance' && <CompliancePlugin />}
 
           {/* Plugin Screen 4: Apache AGE Attack Graph */}
-          {activeTab === 'attack-graph' && <AttackGraph />}
+          {activeTab === 'attack-graph' && <AttackGraph findings={riskQueue} />}
 
           {/* Plugin Screen 5: Grafana Telemetry Embeds */}
           {activeTab === 'dashboards' && <GrafanaEmbeds />}

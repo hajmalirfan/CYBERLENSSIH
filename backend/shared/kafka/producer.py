@@ -56,9 +56,47 @@ class FindingProducer:
             logger.error("Error publishing findings to Kafka: %s", e)
             return False
 
+    def send(self, topic: str, key: Optional[str] = None, value: Any = None) -> bool:
+        """Send message to any Kafka topic (e.g. scan.jobs, findings.raw, alerts.outbound)."""
+        if hasattr(value, "model_dump"):
+            payload = value.model_dump(mode="json")
+        elif isinstance(value, dict):
+            payload = value
+        elif isinstance(value, str):
+            try:
+                payload = json.loads(value)
+            except Exception:
+                payload = {"data": value}
+        else:
+            payload = {"data": str(value)}
+
+        if not self._producer:
+            logger.debug("[Kafka Offline -> %s] (key=%s): %s", topic, key, str(payload)[:200])
+            return True
+
+        try:
+            key_bytes = key.encode("utf-8") if key is not None else None
+            self._producer.send(topic, key=key_bytes, value=payload)
+            return True
+        except Exception as e:
+            logger.error("Error publishing to Kafka topic %s: %s", topic, e)
+            return False
+
+    def flush(self, timeout: float = 3.0):
+        if self._producer:
+            try:
+                self._producer.flush(timeout=timeout)
+            except Exception:
+                pass
+
     def close(self):
         if self._producer:
             try:
                 self._producer.close(timeout=3)
             except Exception:
                 pass
+
+
+# Global singleton producer
+producer = FindingProducer()
+

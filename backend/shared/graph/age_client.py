@@ -103,6 +103,46 @@ class SecuriXGraphClient:
         """)
 
         cur.execute("""
+        CREATE TABLE IF NOT EXISTS raw_outputs (
+            finding_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            payload TEXT,
+            minio_path TEXT,
+            created_at TEXT
+        );
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS risk_queue (
+            finding_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            asset_id TEXT,
+            title TEXT,
+            eal_inr REAL,
+            p90_loss_inr REAL,
+            rank INT,
+            verdicts TEXT,
+            evidence_url TEXT,
+            status TEXT DEFAULT 'open',
+            updated_at TEXT
+        );
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS scan_jobs (
+            job_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            repo_id TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            commit_sha TEXT,
+            status TEXT DEFAULT 'queued',
+            tools_run TEXT,
+            started_at TEXT,
+            finished_at TEXT
+        );
+        """)
+
+        cur.execute("""
         CREATE TABLE IF NOT EXISTS compliance_verdicts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             finding_id TEXT,
@@ -504,6 +544,22 @@ class SecuriXGraphClient:
             "severity_counts": severity_counts,
         }
 
+    def cypher(self, query: str, params: Optional[Dict[str, Any]] = None, cols: str = "v agtype") -> List[Any]:
+        """Execute a parameterized Cypher query on Apache AGE graph 'securix' (Section 5.1)."""
+        if self.use_pg and self._pg_conn:
+            try:
+                import json
+                with self._pg_conn.cursor() as cur:
+                    cur.execute("LOAD 'age';")
+                    cur.execute('SET search_path = ag_catalog, "$user", public;')
+                    sql = f"SELECT * FROM cypher('securix', $$ {query} $$, %s) AS ({cols})"
+                    cur.execute(sql, (json.dumps(params or {}),))
+                    return cur.fetchall()
+            except Exception as e:
+                logger.warning("AGE Cypher query failed (%s). Emulating response.", e)
+
+        return self.execute_cypher(query).get("results", [])
+
     def execute_cypher(self, cypher_query: str) -> Dict[str, Any]:
         """Execute Cypher query on Apache AGE or fallback to graph projection."""
         if self.use_pg and self._pg_conn:
@@ -527,3 +583,175 @@ class SecuriXGraphClient:
                 {"edge": "AFFECTS", "from": "semgrep_hardcoded_jwt_secret_001", "to": "repo://fintech/payment-gateway"}
             ]
         }
+
+    def store_raw(self, finding_id: str, tenant_id: str, raw_output: Dict[str, Any]) -> None:
+        """Store original tool JSON in raw_outputs table (or MinIO path if > 256KB) (Section 3.4, 5.2)."""
+        import json
+        payload_bytes = json.dumps(raw_output).encode("utf-8")
+        minio_path = None
+        payload_str = json.dumps(raw_output)
+
+        if len(payload_bytes) > 256 * 1024:
+            minio_path = f"raw-outputs/{tenant_id}/{finding_id}.json"
+            payload_str = None
+
+        if self.use_pg and self._pg_conn:
+            try:
+                with self._pg_conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO raw_outputs (finding_id, tenant_id, payload, minio_path)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (finding_id) DO UPDATE SET
+                            payload = EXCLUDED.payload,
+                            minio_path = EXCLUDED.minio_path;
+                    """, (finding_id, tenant_id, payload_str, minio_path))
+                    self._pg_conn.commit()
+                return
+            except Exception as e:
+                logger.warning("Failed to store raw output in Postgres: %s", e)
+
+        # SQLite fallback
+        try:
+            cur = self._sqlite_conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO raw_outputs (finding_id, tenant_id, payload, minio_path, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (finding_id, tenant_id, payload_str, minio_path, datetime.now(timezone.utc).isoformat()))
+            self._sqlite_conn.commit()
+        except Exception as e:
+            logger.warning("Failed to store raw output in SQLite: %s", e)
+
+    def write_final_state(self, state: Dict[str, Any]) -> None:
+        """Step 20: Idempotent writes of RiskState to graph and flat risk_queue row (Section 3.4, 9.1)."""
+        import json
+        inv = state.get("inv", {})
+        risk = state.get("risk", {})
+        verdicts = state.get("verdicts", {})
+        rank = state.get("rank", {})
+        finding_id = inv.get("finding_id") or inv.get("rule_id", "f_unknown")
+        tenant_id = inv.get("tenant_id", "default")
+        asset_id = inv.get("target_id") or inv.get("asset_id", "unknown_asset")
+        title = inv.get("summary") or inv.get("description", "Investigated Security Finding")
+        eal_inr = float(risk.get("eal_inr", 0.0))
+        p90_loss_inr = float(risk.get("percentiles", {}).get(90, eal_inr * 1.5))
+        finding_rank = rank.get(finding_id, 1) if isinstance(rank, dict) else int(rank or 1)
+        evidence_url = f"/evidence/{finding_id}"
+        status = "verified" if state.get("proof", {}).get("exploitable") else "open"
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Update AGE Graph RiskState node & edge
+        self.cypher("""
+            MATCH (f:Finding {finding_id: $finding_id})
+            MERGE (r:RiskState {finding_id: $finding_id})
+            SET r.eal_inr = $eal_inr, r.p90_loss_inr = $p90_loss_inr, r.rank = $rank,
+                r.status = $status, r.updated_at = $now_iso
+            MERGE (f)-[:HAS_RISK]->(r)
+        """, {
+            "finding_id": finding_id,
+            "eal_inr": eal_inr,
+            "p90_loss_inr": p90_loss_inr,
+            "rank": finding_rank,
+            "status": status,
+            "now_iso": now_iso
+        })
+
+        # Upsert risk_queue table
+        if self.use_pg and self._pg_conn:
+            try:
+                with self._pg_conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO risk_queue (
+                            finding_id, tenant_id, asset_id, title, eal_inr, p90_loss_inr,
+                            rank, verdicts, evidence_url, status, updated_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (finding_id) DO UPDATE SET
+                            eal_inr = EXCLUDED.eal_inr,
+                            p90_loss_inr = EXCLUDED.p90_loss_inr,
+                            rank = EXCLUDED.rank,
+                            verdicts = EXCLUDED.verdicts,
+                            evidence_url = EXCLUDED.evidence_url,
+                            status = EXCLUDED.status,
+                            updated_at = EXCLUDED.updated_at;
+                    """, (
+                        finding_id, tenant_id, asset_id, title, eal_inr, p90_loss_inr,
+                        finding_rank, json.dumps(verdicts), evidence_url, status, now_iso
+                    ))
+                    self._pg_conn.commit()
+                return
+            except Exception as e:
+                logger.warning("Error writing risk_queue in Postgres: %s", e)
+
+        # SQLite fallback
+        try:
+            cur = self._sqlite_conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO risk_queue (
+                    finding_id, tenant_id, asset_id, title, eal_inr, p90_loss_inr,
+                    rank, verdicts, evidence_url, status, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                finding_id, tenant_id, asset_id, title, eal_inr, p90_loss_inr,
+                finding_rank, json.dumps(verdicts), evidence_url, status, now_iso
+            ))
+            self._sqlite_conn.commit()
+        except Exception as e:
+            logger.warning("Error writing risk_queue in SQLite: %s", e)
+
+    async def maybe_trigger(self, f: Dict[str, Any]) -> None:
+        """Step 11: Evaluate finding seriousness and start InvestigateAssetWorkflow (Section 5.3)."""
+        sev = str(f.get("severity", "low")).lower()
+        asset_id = f.get("asset_id") or f.get("target_id") or f.get("target", "")
+        asset = self.get_asset_detail(asset_id) or {"asset": {"criticality": "HIGH"}}
+        crit = asset.get("asset", {}).get("criticality", "HIGH").upper()
+
+        serious = (sev in {"critical", "high"}) or (sev == "medium" and crit in {"HIGH", "CRITICAL"})
+        if not serious:
+            return
+
+        fid = f.get("finding_id") or f.get("scan_id", "f1")
+        temporal_addr = os.getenv("TEMPORAL_ADDRESS", "temporal:7233")
+        try:
+            from temporalio.client import Client
+            from temporalio.common import WorkflowIDReusePolicy
+            client = await Client.connect(temporal_addr)
+            await client.start_workflow(
+                "InvestigateAssetWorkflow",
+                fid,
+                id=f"investigate-{fid}",
+                task_queue="investigations",
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
+            )
+            logger.info("Triggered Temporal InvestigateAssetWorkflow for finding %s", fid)
+        except Exception as e:
+            logger.info("Temporal trigger skipped (%s). Workflow ready for worker invocation.", e)
+
+
+    def get_assets(
+        self,
+        asset_type: Optional[str] = None,
+        criticality: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Return all assets with optional filters (used by Graph Query API /assets endpoint)."""
+        cur = self._sqlite_conn.cursor()
+        query = "SELECT * FROM assets WHERE 1=1"
+        params: List[Any] = []
+        if asset_type:
+            query += " AND asset_type = ?"
+            params.append(asset_type)
+        if criticality:
+            query += " AND criticality = ?"
+            params.append(criticality.upper())
+        query += " ORDER BY criticality DESC LIMIT ?"
+        params.append(limit)
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+
+    def get_graph_stats(self) -> Dict[str, Any]:
+        """Alias for get_stats() — used by dashboard summary endpoints."""
+        return self.get_stats()
+
+
+# Expose Graph alias matching libs/graph_client/age.py in guide
+Graph = SecuriXGraphClient

@@ -9,6 +9,9 @@ SET search_path = ag_catalog, "$user", public;
 -- 2. Create the SecuriX Security Graph
 DO $$
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM ag_graph WHERE name = 'securix') THEN
+        PERFORM create_graph('securix');
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM ag_graph WHERE name = 'securix_graph') THEN
         PERFORM create_graph('securix_graph');
     END IF;
@@ -18,6 +21,41 @@ END $$;
 RESET search_path;
 
 -- 3. Relational Materialized Tables for Hybrid High-Speed Querying & Indexing
+-- Section 3.4 of SecuriX Implementation Guide
+CREATE TABLE IF NOT EXISTS raw_outputs (
+    finding_id   VARCHAR(255) PRIMARY KEY,
+    tenant_id    TEXT NOT NULL,
+    payload      JSONB,            -- null when stored in MinIO
+    minio_path   TEXT,             -- used when payload > 256 KB
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS risk_queue (          -- flat copy of RiskState for Grafana/Metabase
+    finding_id   VARCHAR(255) PRIMARY KEY,
+    tenant_id    TEXT NOT NULL,
+    asset_id     TEXT,
+    title        TEXT,
+    eal_inr      NUMERIC,
+    p90_loss_inr NUMERIC,
+    rank         INT,
+    verdicts     JSONB,            -- {"RBI-AC-04": "FAIL", ...}
+    evidence_url TEXT,
+    status       TEXT,             -- open | verified | fixed
+    updated_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scan_jobs (
+    job_id       VARCHAR(255) PRIMARY KEY,
+    tenant_id    TEXT NOT NULL,
+    repo_id      TEXT NOT NULL,
+    mode         TEXT NOT NULL,    -- full | incremental
+    commit_sha   TEXT,
+    status       TEXT,             -- queued | running | done | failed
+    tools_run    TEXT[],
+    started_at   TIMESTAMPTZ,
+    finished_at  TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS assets (
     asset_id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -83,6 +121,8 @@ CREATE INDEX IF NOT EXISTS idx_findings_asset ON findings(asset_id);
 CREATE INDEX IF NOT EXISTS idx_findings_tool ON findings(tool);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_compliance_reg ON compliance_verdicts(regulation, status);
+CREATE INDEX IF NOT EXISTS idx_risk_queue_tenant ON risk_queue(tenant_id, rank);
+CREATE INDEX IF NOT EXISTS idx_scan_jobs_repo ON scan_jobs(repo_id, status);
 
 -- 5. Seed Pre-Populated Realistic Demo Assets & Findings
 INSERT INTO assets (asset_id, name, asset_type, criticality, owner) VALUES

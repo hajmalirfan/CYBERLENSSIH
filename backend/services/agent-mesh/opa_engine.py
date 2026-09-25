@@ -16,6 +16,13 @@ class OPAComplianceEngine:
     POLICIES = [
         {
             "regulation": "RBI",
+            "control_id": "RBI-AC-04",
+            "control_name": "Access to customer data restricted by role",
+            "trigger_keywords": ["missing-authorization", "broken-access-control", "auth", "role", "admin"],
+            "failure_reason": "Missing role-based authorization check fails RBI-AC-04 data access restriction mandate.",
+        },
+        {
+            "regulation": "RBI",
             "control_id": "RBI-CSF-SEC-4.1",
             "control_name": "Cryptographic Key & Secret Management",
             "trigger_keywords": ["secret", "jwt", "key", "credential", "password", "token"],

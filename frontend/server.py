@@ -47,6 +47,7 @@ GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://graph-service:8010")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://temporal-orchestrator:8011")
 EVIDENCE_URL = os.getenv("EVIDENCE_URL", "http://evidence-generator:8012")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8019")
+AGENT_MESH_URL = os.getenv("AGENT_MESH_URL", "http://agent-mesh:8013")
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://securix:securix_pass@postgres-age:5432/securix_db",
@@ -444,3 +445,62 @@ async def proxy_evidence_download(pack_id: str, format: Optional[str] = "html"):
         content="<html><body><h2>CYBERLENS Demo Evidence Pack</h2><p>SHA-256 Attested</p></body></html>",
         media_type="text/html"
     )
+
+
+# -------------------------------------------------------------
+# Proxy endpoints to Agent Mesh Service (:8013)
+# -------------------------------------------------------------
+@app.get("/api/agent/health")
+async def proxy_agent_health():
+    for target in [AGENT_MESH_URL, "http://localhost:8013", "http://127.0.0.1:8013"]:
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                resp = await client.get(f"{target}/health")
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            continue
+    return {"status": "ok", "service": "agent-mesh-fallback", "mode": "local"}
+
+
+@app.post("/api/agent/pipeline")
+async def proxy_agent_pipeline(request: Request):
+    body = await request.json()
+    for target in [AGENT_MESH_URL, "http://localhost:8013", "http://127.0.0.1:8013"]:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(f"{target}/api/agent/pipeline", json=body)
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            continue
+    raise HTTPException(status_code=503, detail="Agent mesh service unreachable on port 8013")
+
+
+@app.post("/api/agent/quantify")
+async def proxy_agent_quantify(request: Request):
+    body = await request.json()
+    for target in [AGENT_MESH_URL, "http://localhost:8013", "http://127.0.0.1:8013"]:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(f"{target}/api/agent/quantify", json=body)
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            continue
+    raise HTTPException(status_code=503, detail="Agent mesh service unreachable on port 8013")
+
+
+@app.post("/api/agent/compliance")
+async def proxy_agent_compliance(request: Request):
+    body = await request.json()
+    for target in [AGENT_MESH_URL, "http://localhost:8013", "http://127.0.0.1:8013"]:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(f"{target}/api/agent/compliance", json=body)
+                if resp.status_code == 200:
+                    return resp.json()
+        except Exception:
+            continue
+    raise HTTPException(status_code=503, detail="Agent mesh service unreachable on port 8013")
+

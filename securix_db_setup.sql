@@ -39,6 +39,41 @@
 -- SECTION B  Core Relational Schema (always run this)
 -- ═════════════════════════════════════════════════════════════════════════════
 
+-- B0. RELATIONAL TABLES REQUIRED BY SECURIX IMPLEMENTATION GUIDE (Section 3.4)
+CREATE TABLE IF NOT EXISTS raw_outputs (
+    finding_id   VARCHAR(255) PRIMARY KEY,
+    tenant_id    TEXT NOT NULL,
+    payload      JSONB,            -- null when stored in MinIO
+    minio_path   TEXT,             -- used when payload > 256 KB
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS risk_queue (          -- flat copy of RiskState for Grafana/Metabase
+    finding_id   VARCHAR(255) PRIMARY KEY,
+    tenant_id    TEXT NOT NULL,
+    asset_id     TEXT,
+    title        TEXT,
+    eal_inr      NUMERIC,
+    p90_loss_inr NUMERIC,
+    rank         INT,
+    verdicts     JSONB,            -- {"RBI-AC-04": "FAIL", ...}
+    evidence_url TEXT,
+    status       TEXT,             -- open | verified | fixed
+    updated_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scan_jobs (
+    job_id       VARCHAR(255) PRIMARY KEY,
+    tenant_id    TEXT NOT NULL,
+    repo_id      TEXT NOT NULL,
+    mode         TEXT NOT NULL,    -- full | incremental
+    commit_sha   TEXT,
+    status       TEXT,             -- queued | running | done | failed
+    tools_run    TEXT[],
+    started_at   TIMESTAMPTZ,
+    finished_at  TIMESTAMPTZ
+);
+
 -- B1. ASSETS — monitored attack-surface targets
 --     Written by: temporal-orchestrator when a scan is first triggered
 CREATE TABLE IF NOT EXISTS assets (

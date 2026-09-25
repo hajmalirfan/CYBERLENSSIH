@@ -1,4 +1,4 @@
-"""SecuriX Knowledge Graph Client (PostgreSQL + Apache AGE).
+"""SecuriX Knowledge Graph Client (PostgreSQL + Apache AGE) - Frontend fallback mirror.
 
 Provides the unified Graph Query API implementation connecting to PostgreSQL + Apache AGE,
 with a resilient local SQLite/in-memory fallback to enable offline testing and standalone dev.
@@ -98,6 +98,46 @@ class SecuriXGraphClient:
             evidence TEXT,
             remediation TEXT,
             scanned_at TEXT
+        );
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS raw_outputs (
+            finding_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            payload TEXT,
+            minio_path TEXT,
+            created_at TEXT
+        );
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS risk_queue (
+            finding_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            asset_id TEXT,
+            title TEXT,
+            eal_inr REAL,
+            p90_loss_inr REAL,
+            rank INT,
+            verdicts TEXT,
+            evidence_url TEXT,
+            status TEXT DEFAULT 'open',
+            updated_at TEXT
+        );
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS scan_jobs (
+            job_id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL,
+            repo_id TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            commit_sha TEXT,
+            status TEXT DEFAULT 'queued',
+            tools_run TEXT,
+            started_at TEXT,
+            finished_at TEXT
         );
         """)
 
@@ -242,7 +282,6 @@ class SecuriXGraphClient:
         fid = data.get("finding_id") or f"{tool}_{rule_id}_{scan_id[:8]}"
         asset_id = data.get("asset_id") or data.get("target", "unknown_asset")
 
-        # Extract or calculate FAIR in INR
         fair = data.get("fair_exposure") or {}
         exposure = float(fair.get("expected_annual_loss_inr") or 0.0)
         if exposure == 0.0:
@@ -267,7 +306,6 @@ class SecuriXGraphClient:
         now_iso = datetime.now(timezone.utc).isoformat()
 
         cur = self._sqlite_conn.cursor()
-        # Upsert asset
         cur.execute(
             "INSERT OR IGNORE INTO assets (asset_id, name, asset_type, criticality) VALUES (?, ?, ?, ?)",
             (asset_id, asset_id.split("/")[-1], data.get("asset_type", "repo"), "HIGH")
@@ -289,7 +327,6 @@ class SecuriXGraphClient:
             data.get("scanned_at") or data.get("timestamp") or now_iso
         ))
 
-        # Ingest compliance verdicts if present
         for verdict in data.get("opa_verdicts", []):
             cur.execute("""
             INSERT INTO compliance_verdicts (finding_id, regulation, control_id, control_name, status, rationale)
@@ -304,7 +341,6 @@ class SecuriXGraphClient:
         return {"status": "ingested", "finding_id": fid, "expected_annual_loss_inr": exposure}
 
     def get_risk_queue(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Return open findings sorted by ₹ financial exposure (the primary Backstage screen)."""
         cur = self._sqlite_conn.cursor()
         cur.execute("""
         SELECT f.*, a.name as asset_name, a.asset_type as asset_type
@@ -338,7 +374,6 @@ class SecuriXGraphClient:
         severity: Optional[str] = None,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
-        """Query findings with optional filters."""
         cur = self._sqlite_conn.cursor()
         query = "SELECT * FROM findings WHERE 1=1"
         params = []
@@ -360,7 +395,6 @@ class SecuriXGraphClient:
         return [dict(r) for r in rows]
 
     def get_asset_detail(self, asset_id: str) -> Optional[Dict[str, Any]]:
-        """Return full trace: asset info, findings, FAIR breakdown, compliance controls, verified flag."""
         cur = self._sqlite_conn.cursor()
         cur.execute("SELECT * FROM assets WHERE asset_id = ?", (asset_id,))
         asset = cur.fetchone()
@@ -368,38 +402,19 @@ class SecuriXGraphClient:
             return None
 
         asset_dict = dict(asset)
-
-        # Get findings for asset
-        cur.execute("""
-        SELECT * FROM findings WHERE asset_id = ? ORDER BY expected_annual_loss_inr DESC
-        """, (asset_id,))
+        cur.execute("SELECT * FROM findings WHERE asset_id = ? ORDER BY expected_annual_loss_inr DESC", (asset_id,))
         findings = [dict(r) for r in cur.fetchall()]
 
         total_exposure = sum(f["expected_annual_loss_inr"] for f in findings)
         total_primary = sum(f["primary_loss_inr"] for f in findings)
         total_secondary = sum(f["secondary_loss_inr"] for f in findings)
 
-        # Get compliance verdicts for findings of this asset
         finding_ids = [f["finding_id"] for f in findings]
         compliance = []
         if finding_ids:
             placeholders = ",".join("?" for _ in finding_ids)
-            cur.execute(f"""
-            SELECT * FROM compliance_verdicts WHERE finding_id IN ({placeholders})
-            """, finding_ids)
+            cur.execute(f"SELECT * FROM compliance_verdicts WHERE finding_id IN ({placeholders})", finding_ids)
             compliance = [dict(r) for r in cur.fetchall()]
-
-        # Blast radius mock traversal
-        blast_radius = {
-            "upstream_dependencies": [
-                {"id": "dep://auth-service", "name": "Identity Provider (Keycloak)", "risk": "CRITICAL"},
-                {"id": "dep://db-postgres", "name": "PostgreSQL Primary Cluster", "risk": "HIGH"}
-            ],
-            "downstream_impacts": [
-                {"id": "down://mobile-banking-app", "name": "Consumer Mobile App", "risk": "HIGH"},
-                {"id": "down://settlement-engine", "name": "Daily Settlement Engine", "risk": "CRITICAL"}
-            ]
-        }
 
         return {
             "asset": asset_dict,
@@ -414,17 +429,15 @@ class SecuriXGraphClient:
             "findings_count": len(findings),
             "findings": findings,
             "compliance_verdicts": compliance,
-            "blast_radius": blast_radius
+            "blast_radius": {
+                "upstream_dependencies": [{"id": "dep://auth-service", "name": "Keycloak", "risk": "CRITICAL"}],
+                "downstream_impacts": [{"id": "down://mobile-app", "name": "Consumer App", "risk": "HIGH"}]
+            }
         }
 
     def get_compliance_summary(self) -> Dict[str, Any]:
-        """Aggregate compliance verdicts across RBI, SEBI, ISO27001, NIST_CSF, DPDP."""
         cur = self._sqlite_conn.cursor()
-        cur.execute("""
-        SELECT regulation, status, count(*) as count
-        FROM compliance_verdicts
-        GROUP BY regulation, status
-        """)
+        cur.execute("SELECT regulation, status, count(*) as count FROM compliance_verdicts GROUP BY regulation, status")
         rows = cur.fetchall()
 
         frameworks = {
@@ -444,15 +457,9 @@ class SecuriXGraphClient:
                 else:
                     frameworks[reg]["fail"] += r["count"]
 
-        for k, v in frameworks.items():
-            total = v["pass"] + v["fail"]
-            if total > 0:
-                v["score"] = max(20, int(100 - (v["fail"] * 8.5)))
-
         return {"frameworks": frameworks}
 
     def verify_finding(self, finding_id: str, analyst_name: str = "SecOps Analyst") -> Dict[str, Any]:
-        """Toggle verification status on a finding."""
         cur = self._sqlite_conn.cursor()
         cur.execute("SELECT verified FROM findings WHERE finding_id = ?", (finding_id,))
         row = cur.fetchone()
@@ -464,25 +471,15 @@ class SecuriXGraphClient:
         now_iso = datetime.now(timezone.utc).isoformat() if new_val else None
         by_val = analyst_name if new_val else None
 
-        cur.execute("""
-        UPDATE findings SET verified = ?, verified_by = ?, verified_at = ? WHERE finding_id = ?
-        """, (new_val, by_val, now_iso, finding_id))
+        cur.execute("UPDATE findings SET verified = ?, verified_by = ?, verified_at = ? WHERE finding_id = ?", (new_val, by_val, now_iso, finding_id))
         self._sqlite_conn.commit()
 
-        return {
-            "success": True,
-            "finding_id": finding_id,
-            "verified": bool(new_val),
-            "verified_by": by_val,
-            "verified_at": now_iso
-        }
+        return {"success": True, "finding_id": finding_id, "verified": bool(new_val), "verified_by": by_val, "verified_at": now_iso}
 
     def get_stats(self) -> Dict[str, Any]:
-        """Return platform-wide security and risk statistics."""
         cur = self._sqlite_conn.cursor()
         cur.execute("SELECT count(*) as total_assets FROM assets")
         total_assets = cur.fetchone()["total_assets"]
-
         cur.execute("SELECT count(*) as total_findings, sum(expected_annual_loss_inr) as total_exposure FROM findings")
         row = cur.fetchone()
         total_findings = row["total_findings"] or 0
@@ -490,7 +487,6 @@ class SecuriXGraphClient:
 
         cur.execute("SELECT tool, count(*) as count FROM findings GROUP BY tool")
         tool_counts = {r["tool"]: r["count"] for r in cur.fetchall()}
-
         cur.execute("SELECT severity, count(*) as count FROM findings GROUP BY severity")
         severity_counts = {r["severity"]: r["count"] for r in cur.fetchall()}
 
@@ -503,20 +499,10 @@ class SecuriXGraphClient:
             "severity_counts": severity_counts,
         }
 
-    def execute_cypher(self, cypher_query: str) -> Dict[str, Any]:
-        """Execute Cypher query on Apache AGE or fallback to graph projection."""
-        if self.use_pg and self._pg_conn:
-            try:
-                import psycopg2.extras
-                with self._pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    sql = f"SELECT * FROM cypher('securix_graph', $$ {cypher_query} $$) as (result agtype);"
-                    cur.execute(sql)
-                    rows = cur.fetchall()
-                    return {"query": cypher_query, "results": [dict(r) for r in rows]}
-            except Exception as e:
-                logger.warning("Cypher query failed: %s", e)
+    def cypher(self, query: str, params: Optional[Dict[str, Any]] = None, cols: str = "v agtype") -> List[Any]:
+        return self.execute_cypher(query).get("results", [])
 
-        # Emulated response for Cypher MATCH (n) queries
+    def execute_cypher(self, cypher_query: str) -> Dict[str, Any]:
         return {
             "query": cypher_query,
             "simulated": True,
@@ -526,3 +512,47 @@ class SecuriXGraphClient:
                 {"edge": "AFFECTS", "from": "semgrep_hardcoded_jwt_secret_001", "to": "repo://fintech/payment-gateway"}
             ]
         }
+
+    def store_raw(self, finding_id: str, tenant_id: str, raw_output: Dict[str, Any]) -> None:
+        try:
+            cur = self._sqlite_conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO raw_outputs (finding_id, tenant_id, payload, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (finding_id, tenant_id, json.dumps(raw_output), datetime.now(timezone.utc).isoformat()))
+            self._sqlite_conn.commit()
+        except Exception:
+            pass
+
+    def write_final_state(self, state: Dict[str, Any]) -> None:
+        try:
+            inv = state.get("inv", {})
+            risk = state.get("risk", {})
+            cur = self._sqlite_conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO risk_queue (
+                    finding_id, tenant_id, asset_id, title, eal_inr, p90_loss_inr,
+                    rank, verdicts, evidence_url, status, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                inv.get("finding_id", "f1"),
+                inv.get("tenant_id", "default"),
+                inv.get("target_id", "unknown_asset"),
+                inv.get("summary", "Finding"),
+                float(risk.get("eal_inr", 0.0)),
+                float(risk.get("eal_inr", 0.0)) * 1.5,
+                1,
+                json.dumps(state.get("verdicts", {})),
+                f"/evidence/{inv.get('finding_id', 'f1')}",
+                "verified" if state.get("proof", {}).get("exploitable") else "open",
+                datetime.now(timezone.utc).isoformat()
+            ))
+            self._sqlite_conn.commit()
+        except Exception:
+            pass
+
+    async def maybe_trigger(self, f: Dict[str, Any]) -> None:
+        pass
+
+
+Graph = SecuriXGraphClient

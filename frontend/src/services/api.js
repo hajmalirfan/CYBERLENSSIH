@@ -1,5 +1,3 @@
-import { INITIAL_RISK_QUEUE, COMPLIANCE_REGULATIONS } from '../data/mockData';
-
 const BASE_URL = ''; // Relative path for Vite proxy or server hosting
 
 const TOKEN_KEY = 'securix_token';
@@ -101,14 +99,28 @@ export async function fetchRiskQueue(limit = 50) {
     const res = await fetch(`${BASE_URL}/graph/risk-queue?limit=${limit}`);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         return data;
       }
     }
   } catch (err) {
-    console.warn('Backend graph-service not reached, using resilient local data', err);
+    console.error('Backend graph-service not reached:', err);
   }
-  return INITIAL_RISK_QUEUE;
+  return [];
+}
+
+export async function fetchFindings(params = {}) {
+  try {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${BASE_URL}/graph/findings${query ? '?' + query : ''}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch (err) {
+    console.error('Failed to fetch findings:', err);
+  }
+  return [];
 }
 
 export async function fetchAssetDetail(assetId) {
@@ -118,7 +130,7 @@ export async function fetchAssetDetail(assetId) {
       return await res.json();
     }
   } catch (err) {
-    console.warn('Asset detail fetch error, using local fallback', err);
+    console.error('Asset detail fetch error:', err);
   }
   return null;
 }
@@ -130,9 +142,25 @@ export async function fetchComplianceSummary() {
       return await res.json();
     }
   } catch (err) {
-    console.warn('Compliance summary fetch error, using local fallback', err);
+    console.error('Compliance summary fetch error:', err);
   }
-  return { regulations: COMPLIANCE_REGULATIONS };
+  return { regulations: [], verdicts: [] };
+}
+
+export async function runAgentPipeline(finding, assetCriticality = 'HIGH') {
+  try {
+    const res = await fetch(`${BASE_URL}/api/agent/pipeline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ finding, asset_criticality: assetCriticality })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.error('Agent pipeline execution failed:', err);
+  }
+  return null;
 }
 
 export async function toggleVerifyFinding(findingId, analystName = 'SecOps Lead') {

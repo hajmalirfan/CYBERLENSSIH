@@ -1,0 +1,68 @@
+# SecuriX Risk Calibration Tables
+# Benchmarks: IBM Cost of a Data Breach Report & Verizon DBIR (INR calibrated)
+
+asset_types:
+  payment_gateway:
+    data_type: "financial_and_credentials"
+    cost_per_record_inr:
+      low: 8500
+      mode: 16500
+      high: 32000
+    typical_threat_event_frequency:
+      low: 2.0
+      mode: 6.0
+      high: 15.0
+    vulnerability_baseline:
+      low: 0.4
+      mode: 0.7
+      high: 0.95
+
+  core_banking_api:
+    data_type: "customer_pii_and_accounts"
+    cost_per_record_inr:
+      low: 6500
+      mode: 14000
+      high: 28000
+    typical_threat_event_frequency:
+      low: 1.5
+      mode: 4.5
+      high: 12.0
+    vulnerability_baseline:
+      low: 0.3
+      mode: 0.6
+      high: 0.85
+
+  cloud_storage_bucket:
+    data_type: "unstructured_documents"
+    cost_per_record_inr:
+      low: 3200
+      mode: 8500
+      high: 18000
+    typical_threat_event_frequency:
+      low: 0.5
+      mode: 2.0
+      high: 6.0
+    vulnerability_baseline:
+      low: 0.2
+      mode: 0.45
+      high: 0.75
+
+  internal_microservice:
+    data_type: "telemetry_and_logs"
+    cost_per_record_inr:
+      low: 1200
+      mode: 3500
+      high: 8000
+    typical_threat_event_frequency:
+      low: 0.2
+      mode: 1.0
+      high: 3.0
+    vulnerability_baseline:
+      low: 0.1
+      mode: 0.25
+      high: 0.5
+
+materiality_thresholds_inr:
+  critical_asset_breach: 50000000.0   # ₹5 Crore
+  high_severity_alert: 10000000.0     # ₹1 Crore
+  general_reporting: 1000000.0        # ₹10 Lakhs

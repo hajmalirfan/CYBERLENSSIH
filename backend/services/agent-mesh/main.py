@@ -71,6 +71,23 @@ def health():
     }
 
 
+@app.get("/api/agent/config")
+def get_agent_config():
+    """Returns agent mesh LLM gateway endpoints, available models, and API key status."""
+    return {
+        "agent_service_port": 8013,
+        "litellm_gateway_url": os.getenv("LITELLM_GATEWAY_URL", "http://litellm:4000/v1"),
+        "gateway_chat_endpoint": f"{os.getenv('LITELLM_GATEWAY_URL', 'http://localhost:4000/v1')}/chat/completions",
+        "models_supported": ["gpt-4o-mini", "claude-3-5-sonnet", "gemini-1.5-pro", "ollama-mistral"],
+        "api_keys_configured": {
+            "openai": bool(os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "sk-mock"),
+            "anthropic": bool(os.getenv("ANTHROPIC_API_KEY") and os.getenv("ANTHROPIC_API_KEY") != "sk-mock"),
+            "gemini": bool(os.getenv("GEMINI_API_KEY") and os.getenv("GEMINI_API_KEY") != "sk-mock"),
+        },
+        "env_file_location": ".env at repository root"
+    }
+
+
 @app.post("/api/agent/quantify")
 def quantify_loss(req: QuantifyRequest):
     """Run PyFair Monte Carlo simulation to calculate risk exposure in Indian Rupees (₹)."""
