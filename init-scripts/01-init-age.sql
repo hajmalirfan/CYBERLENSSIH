@@ -14,6 +14,9 @@ BEGIN
     END IF;
 END $$;
 
+-- 2b. Reset search_path so all app tables are created in public schema
+RESET search_path;
+
 -- 3. Relational Materialized Tables for Hybrid High-Speed Querying & Indexing
 CREATE TABLE IF NOT EXISTS assets (
     asset_id VARCHAR(255) PRIMARY KEY,

@@ -5,18 +5,19 @@ services:
   # 1. Knowledge Graph (PostgreSQL + Apache AGE)
   # -------------------------------------------------------------
   postgres-age:
-    image: apache/age:v1.5.0
+    image: apache/age:latest
     container_name: securix-postgres-age
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-securix}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securix_pass}
       POSTGRES_DB: ${POSTGRES_DB:-securix_db}
     volumes:
       - ./init-scripts/01-init-age.sql:/docker-entrypoint-initdb.d/01-init-age.sql:ro
-      - pgdata:/var/lib/postgresql/data
+      - ./init-scripts/02-auth-users.sql:/docker-entrypoint-initdb.d/02-auth-users.sql:ro
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U securix -d securix_db"]
       interval: 5s
