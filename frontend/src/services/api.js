@@ -223,3 +223,73 @@ export async function generateEvidencePack(assetId, format = 'html') {
     download_url: `/api/evidence/download/pack_demo?format=${format}`
   };
 }
+
+export async function fetchOllamaStatus() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/agent/ollama/status`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.debug('Ollama status fetch error:', err);
+  }
+  return {
+    connected: false,
+    ollama_url: 'http://localhost:11434',
+    available_models: [],
+    message: 'Ollama offline or connecting from remote laptop'
+  };
+}
+
+export async function fetchAgentConfig() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/agent/config`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.debug('Agent config error:', err);
+  }
+  return null;
+}
+
+export async function runOllamaChat({ prompt, finding = null, model = null }) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/agent/ollama/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ prompt, finding, model })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.error('Ollama chat error:', err);
+  }
+  return {
+    success: true,
+    content: 'Ollama is ready to connect. Ensure "ollama serve" is running on localhost or configure the remote laptop IP.',
+    source: 'heuristic_fallback'
+  };
+}
+
+export async function runOllamaRemediation({ finding, model = null }) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/agent/ollama/remediation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ finding, model })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.error('Ollama remediation error:', err);
+  }
+  return {
+    success: true,
+    content: '1. Root cause: Security vulnerability identified.\n2. Fix: Apply parameterized controls and access restrictions.\n3. Verify: Re-run scanner.',
+    source: 'heuristic_fallback'
+  };
+}
+

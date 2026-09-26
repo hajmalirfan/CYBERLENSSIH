@@ -10,6 +10,10 @@ export default defineConfig({
         target: 'http://localhost:8019',
         changeOrigin: true,
       },
+      '/api/agent': {
+        target: 'http://localhost:8013',
+        changeOrigin: true,
+      },
       '/graph': {
         target: 'http://localhost:8010',
         changeOrigin: true,

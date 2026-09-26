@@ -22,6 +22,13 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+    load_dotenv()
+except ImportError:
+    pass
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("auth-service")
 
@@ -37,7 +44,7 @@ app.add_middleware(
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://securix:securix_pass@postgres-age:5432/securix_db",
+    "postgresql://postgres:venkat%402007VK@localhost:5432/securix_db",
 )
 JWT_SECRET = os.getenv("JWT_SECRET", "securix-dev-secret-change-me")
 JWT_ALGORITHM = "HS256"

@@ -1,0 +1,58 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "BharatPay High-Volume Funds Transfer & Core Banking API",
+    "version": "2.4.0",
+    "description": "Production REST API for funds transfer, wallet balance lookup, and UPI settlement."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000/api/v2"
+    }
+  ],
+  "paths": {
+    "/funds/transfer": {
+      "post": {
+        "summary": "Execute real-time funds transfer between bank accounts",
+        "operationId": "transferFunds",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source_account": { "type": "string", "example": "SBIN0001092" },
+                  "dest_account": { "type": "string", "example": "HDFC0004812" },
+                  "amount_inr": { "type": "number", "example": 25000.0 },
+                  "auth_token": { "type": "string" }
+                },
+                "required": ["source_account", "dest_account", "amount_inr"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Transfer initiated successfully" },
+          "400": { "description": "Invalid account or SQL error" }
+        }
+      }
+    },
+    "/kyc/patient/{patient_id}": {
+      "get": {
+        "summary": "Fetch ABHA Patient Health & KYC Record",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Patient medical history returned" }
+        }
+      }
+    }
+  }
+}
